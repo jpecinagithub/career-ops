@@ -30,19 +30,11 @@ The skill applies with EQUAL rigor to ALL target roles. None is primary or secon
 
 | Archetype | Thematic axes | What they buy |
 |-----------|---------------|---------------|
-| **AI Platform / LLMOps Engineer** | Evaluation, observability, reliability, pipelines | Someone who puts AI in production with metrics |
-| **Agentic Workflows / Automation** | HITL, tooling, orchestration, multi-agent | Someone who builds reliable agent systems |
-| **Technical AI Product Manager** | GenAI/Agents, PRDs, discovery, delivery | Someone who translates business to AI product |
-| **AI Solutions Architect** | Hyperautomation, enterprise, integrations | Someone who designs end-to-end AI architectures |
-| **AI Forward Deployed Engineer** | Client-facing, fast delivery, prototyping | Someone who delivers AI solutions to clients fast |
-| **AI Transformation Lead** | Change management, adoption, org enablement | Someone who leads AI transformation in an org |
-
-<!-- [CUSTOMIZE] Edit the archetypes above to match YOUR target roles.
-     For example, if you're a backend engineer, replace with:
-     - Senior Backend Engineer
-     - Staff Platform Engineer
-     - Engineering Manager
-     etc. -->
+| **Finance Leader / CFO** | Strategic finance, team leadership, business partnering, P&L ownership | Someone who runs finance end-to-end in a multinational |
+| **Financial Controller** | Month-end close, IFRS, reconciliations, audit readiness, internal controls | Someone who owns the numbers with precision and reliability |
+| **FP&A Manager** | Budgeting, forecasting, financial modeling, scenario analysis, KPIs | Someone who turns data into decisions |
+| **Accounting Manager** | GL, consolidation, reporting, compliance, ERP management | Someone who leads accounting ops across entities |
+| **Finance & Administration Officer** | Finance + admin + HR + legal coordination, grant reporting | Someone who runs the back office of an international org |
 
 ### Adaptive Framing by Archetype
 
@@ -50,38 +42,30 @@ The skill applies with EQUAL rigor to ALL target roles. None is primary or secon
 
 | If the role is... | Emphasize about the candidate... | Proof point sources |
 |-------------------|----------------------------------|---------------------|
-| Platform / LLMOps | Production systems builder, observability, evals, closed-loop | article-digest.md + cv.md |
-| Agentic / Automation | Multi-agent orchestration, HITL, reliability, cost | article-digest.md + cv.md |
-| Technical AI PM | Product discovery, PRDs, metrics, stakeholder mgmt | cv.md + article-digest.md |
-| Solutions Architect | System design, integrations, enterprise-ready | article-digest.md + cv.md |
-| Forward Deployed Engineer | Fast delivery, client-facing, prototype to prod | cv.md + article-digest.md |
-| AI Transformation Lead | Change management, team enablement, adoption | cv.md + article-digest.md |
-
-<!-- [CUSTOMIZE] Map YOUR specific projects/articles to each archetype above -->
+| Finance Leader / CFO | Full ownership of finance function, cross-functional leadership, CFO experience at SurExport | cv.md |
+| Financial Controller | IFRS expertise, month-end close, reconciliations, Dufry SSC multinational experience | cv.md |
+| FP&A Manager | Budgeting, forecasting, cash flow management, business partnering | cv.md |
+| Accounting Manager | GL management, team leadership at BEXIFLON, ERP systems (SAP/Oracle/NetSuite) | cv.md |
+| Finance & Administration Officer | Combined finance+admin+legal+HR, multicultural/international environments | cv.md |
 
 ### Exit Narrative (use in ALL framings)
 
-<!-- [CUSTOMIZE] Replace with YOUR narrative. Examples:
-     - "Built and sold my SaaS after 5 years. Now focused on applied AI at scale."
-     - "Led engineering at a Series B startup through 10x growth. Now seeking my next challenge."
-     - "Transitioned from consulting to building product. Looking for high-ownership roles."
-     Read from config/profile.yml → narrative.exit_story -->
-
 Use the candidate's exit story from `config/profile.yml` to frame ALL content:
-- **In PDF Summaries:** Bridge from past to future -- "Now applying the same [skill] to [JD domain]."
-- **In STAR stories:** Reference proof points from article-digest.md
-- **In Draft Answers (Section G):** The transition narrative should appear in the first response.
-- **When the JD asks for "entrepreneurial", "ownership", "builder", "end-to-end":** This is the #1 differentiator. Increase match weight.
+- **In PDF Summaries:** "Finance leader with 15+ years across Spain, the Netherlands, and Peru — now seeking the next international challenge."
+- **In STAR stories:** Draw from CFO experience at SurExport and multinational SSC experience at Dufry
+- **In Draft Answers (Section G):** Lead with international experience and breadth (finance + controls + team leadership)
+- **When the JD asks for "international", "multicultural", "IFRS", "SSC", "controls":** These are the #1 differentiators. Increase match weight.
 
 ### Cross-cutting Advantage
 
-Frame profile as **"Technical builder with real-world proof"** that adapts framing to the role:
-- For PM: "builder who reduces uncertainty with prototypes then productionizes with discipline"
-- For FDE: "builder who delivers fast with observability and metrics from day 1"
-- For SA: "builder who designs end-to-end systems with real integration experience"
-- For LLMOps: "builder who puts AI in production with closed-loop quality systems"
+Frame profile as **"Finance leader with proven international execution"** that adapts framing to the role:
+- For CFO/Finance Director: "full-function finance ownership with cross-border P&L and team leadership"
+- For Controller: "IFRS-ready, audit-tested, multinational SSC experience with SAP/Oracle/NetSuite"
+- For FP&A: "business partner who drives decisions through rigorous budgeting, forecasting, and cash flow management"
+- For Accounting Manager: "team leader who has built and run accounting operations from scratch"
+- For F&A Officer: "versatile finance professional who covers finance, admin, legal, and HR in lean international environments"
 
-Convert "builder" into a professional signal, not a "hobby maker". Real proof points make this credible.
+Convert "international experience" into a premium signal. Spain + Netherlands + Peru = credibility in cross-border finance.
 
 ### Portfolio as Proof Point (use in high-value applications)
 
