@@ -1,0 +1,66 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cyan: hsl(187, 74%, 32%);
+  --cyan-light: hsl(187, 74%, 48%);
+  --purple: hsl(270, 70%, 55%);
+  --bg: #0f1117;
+  --bg2: #161b27;
+  --bg3: #1e2536;
+  --border: #2a3449;
+  --text: #e2e8f0;
+  --text-muted: #8892a4;
+  --radius: 8px;
+  --sidebar-w: 220px;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+#root { display: flex; height: 100vh; overflow: hidden; }
+
+a { color: var(--cyan-light); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button { cursor: pointer; border: none; font-family: inherit; font-size: 14px; }
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--cyan); }
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Markdown */
+.markdown h1,.markdown h2,.markdown h3 { color: var(--cyan-light); margin: 1.2em 0 0.4em; }
+.markdown h1 { font-size: 1.4em; } .markdown h2 { font-size: 1.2em; } .markdown h3 { font-size: 1em; }
+.markdown p { margin-bottom: 0.8em; }
+.markdown ul,.markdown ol { margin: 0.5em 0 0.8em 1.4em; }
+.markdown li { margin-bottom: 0.2em; }
+.markdown strong { color: #fff; }
+.markdown code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-size: 0.88em; color: var(--cyan-light); }
+.markdown pre { background: var(--bg3); padding: 12px; border-radius: var(--radius); overflow-x: auto; margin: 0.8em 0; }
+.markdown pre code { background: none; padding: 0; color: var(--text); }
+.markdown table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 13px; }
+.markdown th,.markdown td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.markdown th { background: var(--bg3); color: var(--cyan-light); }
+.markdown blockquote { border-left: 3px solid var(--cyan); padding-left: 12px; color: var(--text-muted); margin: 0.8em 0; }
+.markdown hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }

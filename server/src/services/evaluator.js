@@ -7,8 +7,11 @@ import db from '../db/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Project root is 3 levels up from server/src/services/
+const PROJECT_ROOT = join(__dirname, '..', '..', '..');
+
 function loadFile(relativePath) {
-  const fullPath = join(__dirname, '..', '..', relativePath);
+  const fullPath = join(PROJECT_ROOT, relativePath);
   try {
     return readFileSync(fullPath, 'utf-8');
   } catch {

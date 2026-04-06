@@ -8,8 +8,14 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: join(__dirname, '..', '..', '..', '.env') });
 
+// DashScope compatible-mode endpoint (OpenAI SDK compatible)
+// Use dashscope-intl for international accounts, dashscope for China accounts
+const baseURL = process.env.DASHSCOPE_INTL === 'false'
+  ? 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  : 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+
 const openai = new OpenAI({
-  baseURL: 'https://dashscope.aliyuncs.com/api/v1',
+  baseURL,
   apiKey: process.env.QWEN_API_KEY || 'test-key',
 });
 
