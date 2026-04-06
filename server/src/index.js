@@ -13,6 +13,7 @@ import apiRouter from './routes/api.js';
 import pipelineRouter from './routes/pipeline.js';
 import cvRouter from './routes/cv.js';
 import pdfRouter from './routes/pdf.js';
+import scanRouter from './routes/scan.js';
 import { initDb } from './db/index.js';
 import { importApplicationsMd } from './services/importer.js';
 
@@ -27,6 +28,7 @@ app.use('/api', apiRouter);
 app.use('/api/pipeline', pipelineRouter);
 app.use('/api/cv', cvRouter);
 app.use('/api/pdf', pdfRouter);
+app.use('/api/scan', scanRouter);
 
 // Health check
 app.get('/health', (req, res) => {
