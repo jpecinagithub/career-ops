@@ -5,16 +5,117 @@ import { evaluateStream, api } from '../lib/api.js';
 import ScoreBadge from '../components/ScoreBadge.jsx';
 import toast from 'react-hot-toast';
 
-const btn = (variant = 'primary') => ({
+const btn = (variant = 'primary', extra = {}) => ({
   padding: '9px 18px', borderRadius: 6, fontWeight: 600, fontSize: 13,
-  background: variant === 'primary' ? 'var(--cyan)' : 'var(--bg3)',
-  color: '#fff', border: variant === 'primary' ? 'none' : '1px solid var(--border)',
-  opacity: 1, transition: 'opacity 0.15s',
+  background: variant === 'primary' ? 'var(--cyan)' : variant === 'success' ? '#16a34a' : 'var(--bg3)',
+  color: '#fff', border: variant === 'primary' || variant === 'success' ? 'none' : '1px solid var(--border)',
+  cursor: 'pointer', transition: 'opacity 0.15s',
+  ...extra,
 });
+
+const inp = {
+  padding: '8px 12px', background: 'var(--bg3)', border: '1px solid var(--border)',
+  color: 'var(--text)', borderRadius: 6, fontSize: 13, width: '100%', boxSizing: 'border-box',
+};
 
 function extractScore(text) {
   const m = text.match(/\*\*Score:\s*(\d+\.?\d*)\/5\*\*/i);
   return m ? parseFloat(m[1]) : null;
+}
+
+function extractMeta(text) {
+  // Try: # Evaluación: Empresa — Rol
+  const m = text.match(/^#\s*Evaluaci[oó]n:\s*([^—\n]+?)(?:\s*[—–-]\s*([^\n]+))?$/m);
+  if (m) {
+    return {
+      company: m[1]?.trim() || '',
+      role: m[2]?.trim() || '',
+    };
+  }
+  // Fallback: **Empresa:** and **Rol:**
+  const company = text.match(/\*\*Empresa:\*\*\s*([^\n*]+)/i)?.[1]?.trim() || '';
+  const role = text.match(/\*\*Rol:\*\*\s*([^\n*]+)/i)?.[1]?.trim() || '';
+  return { company, role };
+}
+
+function SaveModal({ score, url, report, onClose, onSaved }) {
+  const qc = useQueryClient();
+  const meta = extractMeta(report);
+  const [company, setCompany] = useState(meta.company);
+  const [role, setRole] = useState(meta.role);
+  const [jobUrl, setJobUrl] = useState(url || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!company.trim()) { toast.error('Introduce el nombre de la empresa'); return; }
+    if (!role.trim()) { toast.error('Introduce el título del puesto'); return; }
+    setSaving(true);
+    try {
+      await api.createApplication({
+        company: company.trim(),
+        role: role.trim(),
+        url: jobUrl.trim() || null,
+        score,
+        status: 'Evaluated',
+        notes: `Score: ${score}/5 — evaluada desde el panel`,
+      });
+      qc.invalidateQueries({ queryKey: ['applications'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      toast.success(`✅ Guardada: ${company.trim()}`);
+      onSaved();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }} onClick={onClose}>
+      <div style={{
+        background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12,
+        padding: 28, width: 420, display: 'flex', flexDirection: 'column', gap: 16,
+      }} onClick={e => e.stopPropagation()}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Guardar evaluación</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        {score != null && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Score detectado:</span>
+            <ScoreBadge score={score} />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>EMPRESA *</label>
+          <input style={inp} value={company} onChange={e => setCompany(e.target.value)} placeholder="Ej: Adyen" autoFocus />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>PUESTO *</label>
+          <input style={inp} value={role} onChange={e => setRole(e.target.value)} placeholder="Ej: FP&A Manager" />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>URL DE LA OFERTA</label>
+          <input style={inp} value={jobUrl} onChange={e => setJobUrl(e.target.value)} placeholder="https://..." />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+          <button style={btn('secondary')} onClick={onClose}>Cancelar</button>
+          <button style={btn('success')} onClick={handleSave} disabled={saving}>
+            {saving ? 'Guardando...' : '💾 Guardar en aplicaciones'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Evaluator() {
@@ -23,7 +124,10 @@ export default function Evaluator() {
   const [report, setReport] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [done, setDone] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
   const abortRef = useRef(null);
+  const reportRef = useRef('');
   const qc = useQueryClient();
 
   const score = done ? extractScore(report) : null;
@@ -31,31 +135,27 @@ export default function Evaluator() {
   const handleEvaluate = useCallback(() => {
     if (!jdText.trim()) { toast.error('Pega el texto del JD primero'); return; }
     setReport('');
+    reportRef.current = '';
     setDone(false);
+    setSaved(false);
     setStreaming(true);
 
     abortRef.current = evaluateStream(
       jdText,
-      (chunk) => setReport(prev => prev + chunk),
-      async () => {
+      (chunk) => {
+        reportRef.current += chunk;
+        setReport(prev => prev + chunk);
+      },
+      () => {
         setStreaming(false);
         setDone(true);
-        // Auto-save
-        const finalScore = extractScore(report + '');
-        if (finalScore) {
-          try {
-            await api.createApplication({ company: 'Unknown', role: 'Evaluated role', url: url || null, score: finalScore, status: 'Evaluated', notes: `Auto-saved from Evaluator` });
-            qc.invalidateQueries({ queryKey: ['applications'] });
-            qc.invalidateQueries({ queryKey: ['stats'] });
-          } catch {}
-        }
       },
       (err) => { setStreaming(false); toast.error(`Error: ${err.message}`); }
     );
-  }, [jdText, url]);
+  }, [jdText]);
 
   const handleStop = () => { abortRef.current?.(); setStreaming(false); setDone(true); };
-  const handleClear = () => { setJdText(''); setUrl(''); setReport(''); setDone(false); };
+  const handleClear = () => { setJdText(''); setUrl(''); setReport(''); setDone(false); setSaved(false); };
 
   const handleAddPipeline = async () => {
     if (!url) { toast.error('Introduce la URL para añadir al pipeline'); return; }
@@ -83,13 +183,27 @@ export default function Evaluator() {
             value={jdText} onChange={e => setJdText(e.target.value)}
             style={{ flex: 1, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
           />
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
             <button style={btn()} onClick={handleEvaluate} disabled={streaming}>
               {streaming ? '⏳ Evaluando...' : '🔍 Evaluar'}
             </button>
-            {streaming && <button style={btn('secondary')} onClick={handleStop}>⏹ Parar</button>}
+            {streaming && (
+              <button style={btn('secondary')} onClick={handleStop}>⏹ Parar</button>
+            )}
+            {done && !saved && (
+              <button style={btn('success')} onClick={() => setShowSaveModal(true)}>
+                💾 Guardar
+              </button>
+            )}
+            {saved && (
+              <span style={{ padding: '9px 14px', fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
+                ✅ Guardada
+              </span>
+            )}
+            {done && url && (
+              <button style={btn('secondary')} onClick={handleAddPipeline}>📥 Pipeline</button>
+            )}
             <button style={btn('secondary')} onClick={handleClear}>🗑 Limpiar</button>
-            {done && url && <button style={btn('secondary')} onClick={handleAddPipeline}>📥 Pipeline</button>}
           </div>
         </div>
 
@@ -119,6 +233,16 @@ export default function Evaluator() {
           )}
         </div>
       </div>
+
+      {showSaveModal && (
+        <SaveModal
+          score={score}
+          url={url}
+          report={report}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={() => { setShowSaveModal(false); setSaved(true); }}
+        />
+      )}
 
       <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
     </div>
