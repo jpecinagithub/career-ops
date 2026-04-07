@@ -115,8 +115,9 @@ export function runQuery(sql, params = []) {
 
 export function runInsert(sql, params = []) {
   db.run(sql, params);
+  const lastInsertRowid = db.exec("SELECT last_insert_rowid()")[0]?.values[0][0]; // read BEFORE saveDb()
   saveDb();
-  return { lastInsertRowid: db.exec("SELECT last_insert_rowid()")[0]?.values[0][0] };
+  return { lastInsertRowid };
 }
 
 export function runUpdate(sql, params = []) {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import toast from 'react-hot-toast';
@@ -36,7 +36,8 @@ function ConfirmDialog({ message, detail, onConfirm, onCancel }) {
 
 const STATUS_CONFIG = {
   pending:    { color: '#f59e0b', label: 'Pendiente' },
-  processing: { color: '#3b82f6', label: 'Procesando' },
+  processing: { color: '#3b82f6', label: 'Evaluando' },
+  evaluated:  { color: '#10b981', label: 'Evaluada' },
   done:       { color: '#22c55e', label: 'Hecha' },
   error:      { color: '#ef4444', label: 'Error' },
   skipped:    { color: '#6b7280', label: 'Omitida' },
@@ -62,7 +63,7 @@ function sourceTag(url = '') {
   return { label: 'Otro', color: '#6b7280' };
 }
 
-const STATUSES = ['all', 'pending', 'processing', 'done', 'error', 'skipped'];
+const STATUSES = ['all', 'pending', 'processing', 'evaluated', 'done', 'error', 'skipped'];
 const PAGE_SIZE = 50;
 
 export default function Pipeline() {
@@ -73,6 +74,10 @@ export default function Pipeline() {
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(0);
+  const [processing, setProcessing] = useState(false);
+  const [processLog, setProcessLog] = useState([]);
+  const [processStats, setProcessStats] = useState(null);
+  const abortRef = useRef(null);
   const qc = useQueryClient();
 
   const filters = {
@@ -149,6 +154,81 @@ export default function Pipeline() {
     setPage(0);
   }, [searchInput]);
 
+  const handleAutoEvaluate = () => {
+    if (processing) return;
+    setProcessing(true);
+    setProcessLog([]);
+    setProcessStats(null);
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    fetch('/api/process', { method: 'POST', signal: ctrl.signal })
+      .then(async (res) => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const ev = JSON.parse(line.slice(6));
+              if (ev.type === 'start') {
+                setProcessLog([{ text: `🚀 ${ev.msg}`, color: 'var(--cyan-light)' }]);
+              } else if (ev.type === 'log') {
+                setProcessLog(l => [...l, { text: `  ${ev.msg}`, color: 'var(--text-muted)' }]);
+              } else if (ev.type === 'item_start') {
+                setProcessLog(l => [...l, { text: `\n📋 ${ev.company || 'Empresa'} — ${ev.role || 'Puesto'}`, color: 'var(--text)', bold: true }]);
+              } else if (ev.type === 'item_done') {
+                const scoreColor = ev.score >= 4 ? '#10b981' : ev.score >= 3 ? '#f59e0b' : '#ef4444';
+                setProcessLog(l => [...l, { text: `  ✅ Guardada — Score: ${ev.score}/5`, color: scoreColor }]);
+                qc.invalidateQueries({ queryKey: ['pipeline'] });
+                qc.invalidateQueries({ queryKey: ['applications'] });
+                qc.invalidateQueries({ queryKey: ['stats'] });
+              } else if (ev.type === 'item_error') {
+                setProcessLog(l => [...l, { text: `  ❌ Error: ${ev.error}`, color: '#ef4444' }]);
+                qc.invalidateQueries({ queryKey: ['pipeline'] });
+              } else if (ev.type === 'progress') {
+                setProcessStats({ done: ev.done, errors: ev.errors, total: ev.total });
+              } else if (ev.type === 'complete') {
+                setProcessStats({ done: ev.done, errors: ev.errors, total: ev.total });
+                setProcessLog(l => [...l, { text: `\n🏁 Completado: ${ev.done} evaluadas, ${ev.errors} errores de ${ev.total} total`, color: '#10b981', bold: true }]);
+                setProcessing(false);
+                qc.invalidateQueries({ queryKey: ['pipeline'] });
+                qc.invalidateQueries({ queryKey: ['pipeline-stats'] });
+                qc.invalidateQueries({ queryKey: ['applications'] });
+                qc.invalidateQueries({ queryKey: ['stats'] });
+                toast.success(`✅ ${ev.done} ofertas evaluadas`);
+              } else if (ev.type === 'error') {
+                setProcessLog(l => [...l, { text: `❌ Error: ${ev.msg}`, color: '#ef4444' }]);
+                setProcessing(false);
+              }
+            } catch {}
+          }
+        }
+        setProcessing(false);
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          toast.error(`Error: ${err.message}`);
+          setProcessLog(l => [...l, { text: `❌ ${err.message}`, color: '#ef4444' }]);
+        }
+        setProcessing(false);
+      });
+  };
+
+  const handleStopProcess = () => {
+    abortRef.current?.abort();
+    setProcessing(false);
+    setProcessLog(l => [...l, { text: '⏹ Proceso detenido por el usuario', color: '#f59e0b' }]);
+  };
+
   const handleStatusFilter = (s) => {
     setStatusFilter(s);
     setPage(0);
@@ -164,10 +244,28 @@ export default function Pipeline() {
             {total} ofertas en total · importadas desde pipeline.md + Scanner
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button style={btn()} onClick={() => setShowAdd(s => !s)}>
             {showAdd ? '✕ Cerrar' : '+ Añadir URLs'}
           </button>
+          {/* Auto-evaluate button — only shown when there are pending items */}
+          {total > 0 && !processing && (
+            <button
+              style={{ ...btn(), background: '#7c3aed' }}
+              onClick={handleAutoEvaluate}
+              title="Evaluar automáticamente todas las ofertas pendientes"
+            >
+              🤖 Auto-evaluar
+            </button>
+          )}
+          {processing && (
+            <button
+              style={{ ...btn('secondary'), color: '#f59e0b', borderColor: '#f59e0b44' }}
+              onClick={handleStopProcess}
+            >
+              ⏹ Detener
+            </button>
+          )}
           {total > 0 && (
             <button
               style={{ ...btn('danger'), background: 'transparent', border: '1px solid #ef444466', color: '#ef4444' }}
@@ -180,6 +278,67 @@ export default function Pipeline() {
           )}
         </div>
       </div>
+
+      {/* Auto-evaluate progress panel */}
+      {(processing || processLog.length > 0) && (
+        <div style={{
+          background: 'var(--bg2)', border: `1px solid ${processing ? '#7c3aed44' : 'var(--border)'}`,
+          borderRadius: 10, padding: 16, marginBottom: 20,
+        }}>
+          {/* Header row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {processing
+                ? <span style={{ color: '#7c3aed' }}>⏳ Evaluando ofertas...</span>
+                : <span style={{ color: '#10b981' }}>✅ Evaluación completada</span>
+              }
+            </div>
+            {/* Stats */}
+            {processStats && (
+              <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
+                <span style={{ color: '#10b981' }}>✅ {processStats.done} evaluadas</span>
+                {processStats.errors > 0 && <span style={{ color: '#ef4444' }}>❌ {processStats.errors} errores</span>}
+                <span style={{ color: 'var(--text-muted)' }}>de {processStats.total}</span>
+              </div>
+            )}
+            {/* Progress bar */}
+            {processStats && processStats.total > 0 && (
+              <div style={{ width: 120, height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 3, transition: 'width 0.3s',
+                  background: '#10b981',
+                  width: `${Math.round(((processStats.done + processStats.errors) / processStats.total) * 100)}%`,
+                }} />
+              </div>
+            )}
+          </div>
+
+          {/* Log */}
+          <div style={{
+            fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7,
+            maxHeight: 260, overflowY: 'auto',
+            background: 'var(--bg)', borderRadius: 6, padding: '10px 14px',
+          }}>
+            {processLog.map((entry, i) => (
+              <div key={i} style={{ color: entry.color || 'var(--text)', fontWeight: entry.bold ? 700 : 400, whiteSpace: 'pre-wrap' }}>
+                {entry.text}
+              </div>
+            ))}
+            {processing && (
+              <span style={{ display: 'inline-block', width: 8, height: 12, background: '#7c3aed', animation: 'blink 1s infinite', borderRadius: 1, marginLeft: 4 }} />
+            )}
+          </div>
+
+          {!processing && (
+            <button
+              style={{ marginTop: 10, padding: '4px 12px', fontSize: 11, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text-muted)', borderRadius: 4, cursor: 'pointer' }}
+              onClick={() => setProcessLog([])}
+            >
+              Cerrar log
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Add URLs panel */}
       {showAdd && (
@@ -393,6 +552,8 @@ export default function Pipeline() {
           </button>
         </div>
       )}
+
+      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
 
       {/* Confirm dialog — styled, no native browser alert */}
       {showConfirm && (

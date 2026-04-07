@@ -221,7 +221,7 @@ export async function generateReportPdf(markdown, company, role, score, applicat
   }
 
   // Update application record with pdf_path
-  if (applicationId) {
+  if (applicationId != null) {
     try {
       db.runUpdate('UPDATE applications SET pdf_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [pdfPath, applicationId]);
     } catch {}

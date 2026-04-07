@@ -14,6 +14,7 @@ import pipelineRouter from './routes/pipeline.js';
 import cvRouter from './routes/cv.js';
 import pdfRouter from './routes/pdf.js';
 import scanRouter from './routes/scan.js';
+import processRouter from './routes/process.js';
 import { initDb } from './db/index.js';
 import { importApplicationsMd, importPipelineMd } from './services/importer.js';
 
@@ -29,6 +30,7 @@ app.use('/api/pipeline', pipelineRouter);
 app.use('/api/cv', cvRouter);
 app.use('/api/pdf', pdfRouter);
 app.use('/api/scan', scanRouter);
+app.use('/api/process', processRouter);
 
 // Health check
 app.get('/health', (req, res) => {

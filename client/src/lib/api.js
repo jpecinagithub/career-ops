@@ -54,6 +54,9 @@ export const api = {
   // Evaluate (non-streaming)
   evaluate: (jdText, url) => req('POST', '/evaluate', { jdText, url }),
 
+  // Auto-process pipeline
+  getProcessStatus: () => req('GET', '/process/status'),
+
   // Health
   health: () => fetch('/health').then(r => r.json()),
 };

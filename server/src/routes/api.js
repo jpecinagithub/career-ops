@@ -107,7 +107,7 @@ router.post('/applications', async (req, res) => {
     const { company, role, url, score, status, notes } = req.body;
     if (!company || !role) return res.status(400).json({ error: 'company y role son obligatorios' });
     const result = saveApplication({ company, role, url: url || null, score: score || null, status: status || 'Evaluated', notes: notes || null });
-    res.status(201).json({ id: result.lastInsertRowid, company, role, score, status: status || 'Evaluated' });
+    res.status(201).json({ id: result.id, company, role, score, status: status || 'Evaluated' });
   } catch (error) {
     console.error('Error saving application:', error);
     res.status(500).json({ error: error.message });
