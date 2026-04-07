@@ -163,6 +163,103 @@ async function fetchGreenhouseApi(company, apiUrl, emit) {
   }
 }
 
+// ── VisaSponsor.jobs HTML scraper ───────────────────────────────────────────
+
+/**
+ * Scrapes job cards from visasponsor.jobs HTML pages.
+ * Page structure: <a href="/api/jobs/{id}/{slug}">
+ *   <span class="employer-name">Company</span>
+ *   <div class="location">City, Country</div>
+ *   <span class="publish-date">Publish date DD-MM-YYYY</span>
+ * </a>
+ */
+async function fetchVisaSponsorPage(baseUrl, path, emit) {
+  try {
+    const res = await fetch(`${baseUrl}${path}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; career-ops-scanner/1.0)' },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) { emit({ type: 'log', msg: `    ✗ VisaSponsor ${path}: HTTP ${res.status}` }); return []; }
+    const html = await res.text();
+
+    const jobs = [];
+    // Match each job card anchor: <a href="/api/jobs/{id}/{slug}" class="col-12 ...">...</a>
+    // Cards end right before the next <a href="/api/jobs/... or end of row div
+    const cardRegex = /<a\s+href="(\/api\/jobs\/[a-f0-9]+\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    let cardMatch;
+
+    while ((cardMatch = cardRegex.exec(html)) !== null) {
+      const [, jobPath, cardHtml] = cardMatch;
+
+      // Skip if card doesn't contain job content (must have employer-name)
+      if (!cardHtml.includes('employer-name')) continue;
+
+      // Title from <div class="fs-5 fw-medium ...">Title text</div>
+      const titleMatch = cardHtml.match(/class="fs-5 fw-medium[^"]*"[^>]*>([^<]+)<\/div>/);
+      const title = titleMatch ? titleMatch[1].trim() : null;
+
+      // Company from <span class="... employer-name ...">Company</span>
+      const companyMatch = cardHtml.match(/class="[^"]*employer-name[^"]*"[^>]*>([^<]+)<\/span>/);
+      const company = companyMatch ? companyMatch[1].trim() : null;
+
+      // Location: extract all <span style="color:#25201F">...</span> inside location area
+      // They appear as: City, Region, Country (3 separate spans)
+      const locationSpans = [...cardHtml.matchAll(/<span style="color:#25201F">([^<]+)<\/span>/g)]
+        .map(m => m[1].trim().replace(/,\s*$/, ''))
+        .filter(s => s && !/^\d{2}-\d{2}-\d{4}$/.test(s)); // exclude date strings
+      const location = locationSpans.length > 0 ? locationSpans.join(', ') : null;
+
+      // Date from: Publish date </span><span style="color:#25201F">DD-MM-YYYY</span>
+      const dateMatch = cardHtml.match(/Publish date\s*<\/span><span[^>]*>(\d{2}-\d{2}-\d{4})<\/span>/);
+      let posted_at = null;
+      if (dateMatch) {
+        const [dd, mm, yyyy] = dateMatch[1].split('-');
+        posted_at = `${yyyy}-${mm}-${dd}`;
+      }
+
+      if (title && company) {
+        jobs.push({
+          title,
+          url: `${baseUrl}${jobPath}`,
+          company,
+          location,
+          posted_at,
+          verified_active: true, // listed = open on the portal
+          source: 'VisaSponsor.jobs',
+        });
+      }
+    }
+
+    return jobs;
+  } catch (err) {
+    emit({ type: 'log', msg: `    ✗ VisaSponsor ${path}: ${err.message}` });
+    return [];
+  }
+}
+
+async function fetchVisaSponsorPortals(portalsConfig, emit) {
+  const portals = (portalsConfig || []).filter(p => p.enabled !== false);
+  if (portals.length === 0) return [];
+
+  const allJobs = [];
+
+  for (const portal of portals) {
+    emit({ type: 'log', msg: `\n🌐 ${portal.name} (${portal.pages?.length || 0} páginas)...` });
+    const pages = portal.pages || [];
+    let portalTotal = 0;
+
+    for (const page of pages) {
+      const jobs = await fetchVisaSponsorPage(portal.base_url, page, emit);
+      allJobs.push(...jobs);
+      portalTotal += jobs.length;
+    }
+
+    emit({ type: 'log', msg: `    ✓ ${portal.name}: ${portalTotal} ofertas encontradas` });
+  }
+
+  return allJobs;
+}
+
 // ── WebSearch via DashScope ─────────────────────────────────────────────────
 
 // Track LLM availability — if it fails once, skip remaining WebSearch queries
@@ -222,7 +319,7 @@ Return ONLY a valid JSON array, no markdown fences, no explanation:
 export async function runScan(emit) {
   llmAvailable = null; // reset per scan — re-test LLM availability each time
   const config = loadPortalsConfig();
-  const { title_filter, tracked_companies = [], search_queries = [] } = config;
+  const { title_filter, tracked_companies = [], search_queries = [], visa_sponsor_portals = [] } = config;
   const locationExclude = title_filter.location_exclude || [];
   const languageExclude = title_filter.language_exclude || [];
   const seen = loadSeenUrls();
@@ -249,6 +346,11 @@ export async function runScan(emit) {
     totalFound += jobs.length;
   }
 
+  // ── Level 2b: VisaSponsor.jobs HTML scraper ────────────────────────────────
+  const vsJobs = await fetchVisaSponsorPortals(visa_sponsor_portals, emit);
+  allJobs.push(...vsJobs);
+  totalFound += vsJobs.length;
+
   // ── Level 3: WebSearch queries ─────────────────────────────────────────────
   const queries = search_queries.filter(q => q.enabled !== false).slice(0, 10); // limit to 10 to avoid rate limits
   emit({ type: 'log', msg: `\n🔍 WebSearch queries (${queries.length} queries)...` });
@@ -263,7 +365,7 @@ export async function runScan(emit) {
 
   // ── Filter + dedup ─────────────────────────────────────────────────────────
   emit({ type: 'log', msg: `\n🔎 Filtrando ${totalFound} ofertas brutas...` });
-  emit({ type: 'log', msg: `   (${allJobs.filter(j=>j.verified_active).length} via API activa · ${allJobs.filter(j=>!j.verified_active).length} via WebSearch)` });
+  emit({ type: 'log', msg: `   (${allJobs.filter(j=>j.verified_active).length} via API/scraper · ${allJobs.filter(j=>!j.verified_active).length} via WebSearch)` });
 
   for (const job of allJobs) {
     if (!job.url || !job.title) continue;
