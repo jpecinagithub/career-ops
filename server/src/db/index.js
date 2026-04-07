@@ -56,11 +56,17 @@ export async function initDb() {
       url TEXT NOT NULL UNIQUE,
       company TEXT,
       role TEXT,
+      location TEXT,
+      job_type TEXT,
       status TEXT DEFAULT 'pending',
       source TEXT,
       added_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migration: add columns if they don't exist (safe on existing DBs)
+  try { db.run('ALTER TABLE pipeline_urls ADD COLUMN location TEXT'); } catch {}
+  try { db.run('ALTER TABLE pipeline_urls ADD COLUMN job_type TEXT'); } catch {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS scan_history (

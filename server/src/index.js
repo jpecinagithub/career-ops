@@ -15,7 +15,7 @@ import cvRouter from './routes/cv.js';
 import pdfRouter from './routes/pdf.js';
 import scanRouter from './routes/scan.js';
 import { initDb } from './db/index.js';
-import { importApplicationsMd } from './services/importer.js';
+import { importApplicationsMd, importPipelineMd } from './services/importer.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -55,6 +55,7 @@ async function start() {
 
     // Import existing markdown data on first run
     await importApplicationsMd();
+    await importPipelineMd();
 
     app.listen(PORT, () => {
       console.log(`\n🚀 Career-Ops API running on http://localhost:${PORT}`);

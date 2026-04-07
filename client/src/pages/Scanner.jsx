@@ -97,6 +97,7 @@ export default function Scanner() {
         setSummary(event.summary);
         addLog(`\n✅ Scan completado: ${event.summary.added} nuevas ofertas añadidas`, 'done');
         qc.invalidateQueries({ queryKey: ['pipeline'] });
+        qc.invalidateQueries({ queryKey: ['pipeline-stats'] });
         toast.success(`Scan completado: ${event.summary.added} nuevas ofertas`);
         break;
       case 'error':
@@ -131,6 +132,7 @@ export default function Scanner() {
         <div style={{ display: 'flex', gap: 12, margin: '16px 0' }}>
           {[
             ['Encontradas', summary.totalFound, 'var(--text)'],
+            ['Antiguas (+14d)', summary.tooOld ?? 0, '#f59e0b'],
             ['Filtradas', summary.filtered, 'var(--text-muted)'],
             ['Duplicadas', summary.duplicated, 'var(--text-muted)'],
             ['Nuevas', summary.added, '#22c55e'],

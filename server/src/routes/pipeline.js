@@ -1,20 +1,50 @@
 import express from 'express';
+import { writeFileSync, existsSync } from 'fs';
+import { projectPath } from '../utils/paths.js';
 import db from '../db/index.js';
 
 const router = express.Router();
 
-// GET /api/pipeline — list pipeline URLs
+// GET /api/pipeline/debug — verify DB is reachable and shows row count
+router.get('/debug', (req, res) => {
+  try {
+    const count = db.runQuery('SELECT COUNT(*) as n FROM pipeline_urls')[0];
+    const sample = db.runQuery('SELECT id, company, role, status FROM pipeline_urls ORDER BY id DESC LIMIT 5');
+    res.json({ ok: true, totalRows: count?.n, sample });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/pipeline — list pipeline URLs with optional search + filter + pagination
 router.get('/', (req, res) => {
   try {
-    const { status } = req.query;
-    let sql = 'SELECT * FROM pipeline_urls';
+    const { status, search, limit = 500, offset = 0 } = req.query;
+    const conditions = [];
     const params = [];
-    if (status) {
-      sql += ' WHERE status = ?';
+
+    if (status && status !== 'all') {
+      conditions.push('status = ?');
       params.push(status);
     }
-    sql += ' ORDER BY added_at DESC';
-    res.json(db.runQuery(sql, params));
+    if (search) {
+      conditions.push('(company LIKE ? OR role LIKE ? OR url LIKE ?)');
+      const term = `%${search}%`;
+      params.push(term, term, term);
+    }
+
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+    const sql = `SELECT * FROM pipeline_urls${where} ORDER BY added_at DESC LIMIT ? OFFSET ?`;
+    params.push(parseInt(limit), parseInt(offset));
+
+    const rows = db.runQuery(sql, params);
+
+    // Count total for pagination
+    const countSql = `SELECT COUNT(*) as total FROM pipeline_urls${where}`;
+    const countParams = params.slice(0, -2); // remove limit/offset
+    const total = db.runQuery(countSql, countParams)[0]?.total || 0;
+
+    res.json({ items: rows, total, limit: parseInt(limit), offset: parseInt(offset) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -81,6 +111,31 @@ router.patch('/:id', (req, res) => {
     params.push(req.params.id);
     db.runUpdate(`UPDATE pipeline_urls SET ${fields.join(', ')} WHERE id = ?`, params);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/pipeline/all — wipe entire pipeline + scan history (reset for fresh scan)
+router.delete('/all', (req, res) => {
+  try {
+    const count = db.runQuery('SELECT COUNT(*) as n FROM pipeline_urls')[0]?.n || 0;
+    db.runUpdate('DELETE FROM pipeline_urls');
+
+    // Reset pipeline.md
+    const pipelinePath = projectPath('data', 'pipeline.md');
+    writeFileSync(pipelinePath,
+      '# Pipeline — Pending URLs\n\n' +
+      '<!-- Add job URLs here, one per line, to process with /career-ops pipeline -->\n' +
+      '<!-- Format: - [ ] URL | Company | Title -->\n\n',
+      'utf-8'
+    );
+
+    // Reset scan-history.tsv (keep header only)
+    const histPath = projectPath('data', 'scan-history.tsv');
+    writeFileSync(histPath, 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\n', 'utf-8');
+
+    res.json({ success: true, deleted: count, message: `Pipeline limpiado: ${count} URLs eliminadas` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

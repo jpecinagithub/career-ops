@@ -1,6 +1,7 @@
 /**
  * Imports data/applications.md (markdown table) into SQLite
- * Run once to migrate existing data. Safe to run multiple times (upsert by company+role).
+ * Imports data/pipeline.md (checklist format) into pipeline_urls SQLite table
+ * Run once to migrate existing data. Safe to run multiple times (upsert).
  */
 import { readFileSync, existsSync } from 'fs';
 import { projectPath } from '../utils/paths.js';
@@ -68,5 +69,58 @@ export async function importApplicationsMd() {
   }
 
   console.log(`[importer] Imported ${imported} applications, skipped ${skipped} duplicates`);
+  return { imported, skipped };
+}
+
+/**
+ * Imports data/pipeline.md (markdown checklist) into pipeline_urls table.
+ * Line format: - [ ] URL | Company | Title
+ * Safe to run multiple times — skips duplicates by URL.
+ */
+export async function importPipelineMd() {
+  const mdPath = projectPath('data', 'pipeline.md');
+  if (!existsSync(mdPath)) {
+    console.log('[importer] pipeline.md not found, skipping');
+    return { imported: 0, skipped: 0 };
+  }
+
+  const content = readFileSync(mdPath, 'utf-8');
+  const lines = content.split('\n');
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const line of lines) {
+    // Match both pending [ ] and done [x] checkboxes
+    const match = line.match(/^\s*-\s*\[[ x]\]\s+(.+)/i);
+    if (!match) continue;
+
+    const parts = match[1].split('|').map(s => s.trim());
+    if (parts.length < 1) continue;
+
+    const url = parts[0];
+    if (!url || !url.startsWith('http')) continue;
+
+    const company = parts[1] || null;
+    // Remove star ratings (⭐) from role title
+    const role = parts[2] ? parts[2].replace(/⭐+/g, '').trim() : null;
+
+    // Check duplicate
+    const existing = db.runQuery('SELECT id FROM pipeline_urls WHERE url = ?', [url]);
+    if (existing.length > 0) { skipped++; continue; }
+
+    try {
+      db.runInsert(
+        'INSERT INTO pipeline_urls (url, company, role, status, source) VALUES (?, ?, ?, ?, ?)',
+        [url, company, role, 'pending', 'pipeline.md']
+      );
+      imported++;
+    } catch (e) {
+      // Skip on unique constraint violations or other errors
+      skipped++;
+    }
+  }
+
+  console.log(`[importer] Pipeline: imported ${imported} URLs, skipped ${skipped} duplicates`);
   return { imported, skipped };
 }

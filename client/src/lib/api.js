@@ -27,11 +27,15 @@ export const api = {
   getStats: () => req('GET', '/stats'),
 
   // Pipeline
-  getPipeline: (status) => req('GET', status ? `/pipeline?status=${status}` : '/pipeline'),
+  getPipeline: (filters = {}) => {
+    const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v != null && v !== ''));
+    return req('GET', `/pipeline?${params}`);
+  },
   addToPipeline: (data) => req('POST', '/pipeline', data),
   addBatchToPipeline: (urls) => req('POST', '/pipeline/batch', { urls }),
   updatePipelineItem: (id, data) => req('PATCH', `/pipeline/${id}`, data),
   deletePipelineItem: (id) => req('DELETE', `/pipeline/${id}`),
+  clearPipeline: () => req('DELETE', '/pipeline/all'),
 
   // CV & Profile
   getCV: () => req('GET', '/cv'),
