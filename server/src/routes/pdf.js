@@ -1,6 +1,8 @@
 import express from 'express';
 import { existsSync, createReadStream } from 'fs';
+import { resolve } from 'path';
 import { startPdfJob, getJobStatus, getPdfPath, generateReportPdf } from '../services/pdf.js';
+import { projectPath } from '../utils/paths.js';
 import db from '../db/index.js';
 
 const router = express.Router();
@@ -70,8 +72,13 @@ router.get('/open/:appId', (req, res) => {
   try {
     const row = db.runQuery('SELECT pdf_path FROM applications WHERE id = ?', [req.params.appId]);
     if (!row.length || !row[0].pdf_path) return res.status(404).json({ error: 'PDF no encontrado' });
-    const pdfPath = row[0].pdf_path;
-    if (!existsSync(pdfPath)) return res.status(404).json({ error: 'Archivo no encontrado en disco' });
+
+    // Resolve stored path — may be absolute or relative to project root
+    const stored = row[0].pdf_path;
+    const isAbsolute = stored.startsWith('/') || /^[A-Za-z]:[\\/]/.test(stored);
+    const pdfPath = isAbsolute ? stored : projectPath(stored);
+
+    if (!existsSync(pdfPath)) return res.status(404).json({ error: 'Archivo no encontrado en disco', path: pdfPath });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${pdfPath.split(/[\\/]/).pop()}"`);

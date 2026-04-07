@@ -221,6 +221,10 @@ export function updateApplication(id, data) {
     fields.push('score = ?');
     params.push(data.score);
   }
+  if (data.pdf_path !== undefined) {
+    fields.push('pdf_path = ?');
+    params.push(data.pdf_path);
+  }
 
   fields.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
