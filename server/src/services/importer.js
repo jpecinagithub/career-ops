@@ -46,7 +46,26 @@ export async function importApplicationsMd() {
       'SELECT id FROM applications WHERE company = ? AND role = ?',
       [row.company, row.role]
     );
+
+    const pdfPath = row.pdfDone
+      ? (row.reportPath?.replace('reports/', 'output/').replace('.md', '.pdf') || null)
+      : null;
+
     if (existing.length > 0) {
+      // Update status, score, notes, report_path from the markdown (source of truth for those fields)
+      db.runUpdate(
+        `UPDATE applications SET score = ?, status = ?, pdf_path = ?, report_path = ?, notes = ?
+         WHERE company = ? AND role = ?`,
+        [
+          row.score,
+          row.status || 'Evaluated',
+          pdfPath,
+          row.reportPath || null,
+          row.notes,
+          row.company,
+          row.role,
+        ]
+      );
       skipped++;
       continue;
     }
@@ -59,7 +78,7 @@ export async function importApplicationsMd() {
         row.role,
         row.score,
         row.status || 'Evaluated',
-        row.pdfDone ? (row.reportPath?.replace('reports/', 'output/').replace('.md', '.pdf') || null) : null,
+        pdfPath,
         row.reportPath || null,
         row.notes,
         row.date || new Date().toISOString().split('T')[0]
@@ -68,7 +87,9 @@ export async function importApplicationsMd() {
     imported++;
   }
 
-  console.log(`[importer] Imported ${imported} applications, skipped ${skipped} duplicates`);
+  if (imported > 0) {
+    console.log(`[importer] Imported ${imported} new applications from applications.md`);
+  }
   return { imported, skipped };
 }
 

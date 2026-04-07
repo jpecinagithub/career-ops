@@ -1,5 +1,6 @@
 import express from 'express';
 import { evaluate, saveApplication, getApplications, getApplicationById, updateApplication, getStats } from '../services/evaluator.js';
+import { importApplicationsMd } from '../services/importer.js';
 
 const router = express.Router();
 
@@ -66,15 +67,19 @@ router.post('/evaluate/stream', async (req, res) => {
   }
 });
 
-router.get('/applications', (req, res) => {
+router.get('/applications', async (req, res) => {
   try {
+    // Re-sync from applications.md on every request so CLI evaluations
+    // (written by Claude Code) appear immediately without server restart.
+    await importApplicationsMd();
+
     const filters = {
       status: req.query.status,
       minScore: req.query.minScore ? parseFloat(req.query.minScore) : null,
       company: req.query.company,
       limit: req.query.limit ? parseInt(req.query.limit) : null
     };
-    
+
     const apps = getApplications(filters);
     res.json(apps);
   } catch (error) {
@@ -106,8 +111,9 @@ router.patch('/applications/:id', (req, res) => {
   }
 });
 
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
+    await importApplicationsMd();
     const stats = getStats();
     res.json(stats);
   } catch (error) {
