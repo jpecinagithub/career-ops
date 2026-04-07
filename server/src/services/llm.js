@@ -22,10 +22,39 @@ const openai = new OpenAI({
 console.log('[LLM] API Key loaded:', (process.env.QWEN_API_KEY || 'test-key').substring(0, 10) + '...');
 
 export async function chat(messages, options = {}) {
+  // When enableSearch is requested, use native fetch because the OpenAI SDK
+  // strips DashScope extension params (enable_search) from the request body.
+  if (options.enableSearch) {
+    const body = {
+      model: options.model || 'qwen-plus',
+      messages,
+      temperature: options.temperature ?? 0.3,
+      max_tokens: options.maxTokens || 4000,
+      enable_search: true,
+      search_options: { forced_search: true },
+    };
+    const res = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.QWEN_API_KEY || 'test-key'}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const e = new Error(err.error?.message || `HTTP ${res.status}`);
+      e.status = res.status;
+      throw e;
+    }
+    return res.json();
+  }
+
   const response = await openai.chat.completions.create({
     model: options.model || 'qwen-plus',
     messages,
-    temperature: options.temperature || 0.3,
+    temperature: options.temperature ?? 0.3,
     max_tokens: options.maxTokens || 4000,
     stream: options.stream || false,
   });
@@ -34,7 +63,7 @@ export async function chat(messages, options = {}) {
 
 export async function chatStream(messages, onChunk) {
   const stream = await openai.chat.completions.create({
-    model: 'qwen-plus',
+    model: 'qwen3.5-plus',
     messages,
     temperature: 0.3,
     max_tokens: 4000,

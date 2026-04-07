@@ -176,25 +176,24 @@ async function webSearch(query, emit) {
     const today = new Date().toISOString().split('T')[0];
     const cutoff = cutoffDate(MAX_AGE_DAYS).toISOString().split('T')[0];
 
-    const prompt = `Today is ${today}. Search for active job listings matching this query and return a JSON array.
+    const prompt = `Today is ${today}. Search the web for active job listings matching this query. Return a JSON array of positions you find.
 
 Query: ${query}
 
-RULES:
-- Include jobs that appear to be currently open and accepting applications.
-- Prefer jobs posted or updated in the last ${MAX_AGE_DAYS} days (after ${cutoff}). Include the date if visible.
-- If you can see the posting date, include it. If not visible, include the job anyway with posted_date null.
-- Only include direct application URLs (greenhouse.io, ashbyhq.com, lever.co, workable.com, linkedin.com/jobs, company career pages — NOT search result pages).
-- Do NOT include jobs in the United States, Canada, or Australia.
+INSTRUCTIONS:
+- Search now and return real positions found in your search results.
+- Include any job that appears to be currently open (posted in the last ${MAX_AGE_DAYS} days preferred, but include older ones too if the posting seems active).
+- For the URL, use the best link you can find: direct apply URL, company careers page URL, LinkedIn job view URL, or any URL that leads to this specific job.
+- Include the date if you can see it. If not visible set posted_date to null.
+- Do NOT include jobs located in the United States, Canada, or Australia.
+- Include 3-10 jobs. If you genuinely find nothing, return [].
 
-Return ONLY a valid JSON array (no markdown, no explanation):
-[{"title":"Job Title","url":"https://...","company":"Company Name","posted_date":"YYYY-MM-DD or null","location":"City, Country"}]
-
-Return 3-10 results. Return [] if nothing found.`;
+Return ONLY a valid JSON array, no markdown fences, no explanation:
+[{"title":"Job Title","url":"https://...","company":"Company Name","posted_date":"YYYY-MM-DD or null","location":"City, Country"}]`;
 
     const result = await chat([
       { role: 'user', content: prompt }
-    ], { maxTokens: 1200, temperature: 0.1 });
+    ], { maxTokens: 1200, temperature: 0.1, enableSearch: true });
 
     llmAvailable = true;
     const content = result.choices[0]?.message?.content || '[]';
