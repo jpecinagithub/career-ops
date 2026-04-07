@@ -47,9 +47,15 @@ function matchesFilter(title, filter) {
 
 function isUSLocation(job, locationExclude = []) {
   if (!locationExclude || locationExclude.length === 0) return false;
-  // Check title + location field + url for US indicators
   const haystack = [job.title, job.location, job.company].filter(Boolean).join(' ').toLowerCase();
   return locationExclude.some(term => haystack.includes(term.toLowerCase()));
+}
+
+function isNonTargetLanguage(job, languageExclude = []) {
+  if (!languageExclude || languageExclude.length === 0) return false;
+  // Only check the title — location and company names are often in local language
+  const title = (job.title || '').toLowerCase();
+  return languageExclude.some(term => title.includes(term.toLowerCase()));
 }
 
 function seniorityScore(title, boosts) {
@@ -219,6 +225,7 @@ export async function runScan(emit) {
   const config = loadPortalsConfig();
   const { title_filter, tracked_companies = [], search_queries = [] } = config;
   const locationExclude = title_filter.location_exclude || [];
+  const languageExclude = title_filter.language_exclude || [];
   const seen = loadSeenUrls();
 
   let totalFound = 0;
@@ -284,6 +291,13 @@ export async function runScan(emit) {
     if (isUSLocation(job, locationExclude)) {
       totalFiltered++;
       recordToHistory(job.url, job.source, job.title, job.company, 'skipped_location_us');
+      continue;
+    }
+
+    // Language filter — English and Spanish only
+    if (isNonTargetLanguage(job, languageExclude)) {
+      totalFiltered++;
+      recordToHistory(job.url, job.source, job.title, job.company, 'skipped_language');
       continue;
     }
 
