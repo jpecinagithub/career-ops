@@ -25,41 +25,41 @@ Guardar la evaluación completa en `reports/{###}-{company-slug}-{YYYY-MM-DD}.md
 ## Paso 3 — Generar PDF
 Ejecutar el pipeline completo de `pdf` (leer `modes/pdf.md`).
 
-## Paso 4 — Draft Application Answers (solo si score >= 4.5)
+## Paso 4 — Borradores de respuestas para formulario (solo si score >= 4.5)
 
 Si el score final es >= 4.5, generar borrador de respuestas para el formulario de aplicación:
 
 1. **Extraer preguntas del formulario**: Usar Playwright para navegar al formulario y hacer snapshot. Si no se pueden extraer, usar las preguntas genéricas.
 2. **Generar respuestas** siguiendo el tono (ver abajo).
-3. **Guardar en el report** como sección `## G) Draft Application Answers`.
+3. **Guardar en el report** como sección `## G) Borradores de respuestas para formulario`.
 
 ### Preguntas genéricas (usar si no se pueden extraer del formulario)
 
-- Why are you interested in this role?
-- Why do you want to work at [Company]?
-- Tell us about a relevant project or achievement
-- What makes you a good fit for this position?
-- How did you hear about this role?
+- ¿Por qué te interesa este rol?
+- ¿Por qué quieres trabajar en [Empresa]?
+- Cuéntanos sobre un proyecto o logro relevante
+- ¿Qué te hace un buen candidato para este puesto?
+- ¿Cómo te enteraste de esta oferta?
 
-### Tono para Form Answers
+### Tono para respuestas en formulario
 
-**Posición: "I'm choosing you."** el candidato tiene opciones y está eligiendo esta empresa por razones concretas.
+**Posición: "Yo te elijo a ti."** El candidato tiene opciones y está eligiendo esta empresa por razones concretas.
 
 **Reglas de tono:**
-- **Confiado sin arrogancia**: "I've spent the past year building production AI agent systems — your role is where I want to apply that experience next"
-- **Selectivo sin soberbia**: "I've been intentional about finding a team where I can contribute meaningfully from day one"
-- **Específico y concreto**: Siempre referenciar algo REAL del JD o de la empresa, y algo REAL de la experiencia del candidato
-- **Directo, sin fluff**: 2-4 frases por respuesta. Sin "I'm passionate about..." ni "I would love the opportunity to..."
-- **El hook es la prueba, no la afirmación**: En vez de "I'm great at X", decir "I built X that does Y"
+- **Confiado sin arrogancia**: Referenciar logros concretos, no aspiraciones.
+- **Selectivo sin soberbia**: Mostrar que hay criterios, no desesperación.
+- **Específico y concreto**: Siempre referenciar algo REAL del JD o de la empresa, y algo REAL de la experiencia del candidato.
+- **Directo, sin fluff**: 2-4 frases por respuesta. Sin "Soy apasionado de..." ni "Me encantaría la oportunidad de..."
+- **El hook es la prueba, no la afirmación**: En vez de "Soy bueno en X", decir "Construí X que logró Y."
 
 **Framework por pregunta:**
-- **Why this role?** → "Your [specific thing] maps directly to [specific thing I built]."
-- **Why this company?** → Mencionar algo concreto sobre la empresa. "I've been using [product] for [time/purpose]."
-- **Relevant experience?** → Un proof point cuantificado. "Built [X] that [metric]. Sold the company in 2025."
-- **Good fit?** → "I sit at the intersection of [A] and [B], which is exactly where this role lives."
-- **How did you hear?** → Honesto: "Found through [portal/scan], evaluated against my criteria, and it scored highest."
+- **¿Por qué este rol?** → "Tu [cosa específica] conecta directamente con [lo que hice]."
+- **¿Por qué esta empresa?** → Mencionar algo concreto. "He seguido [producto/empresa] desde [contexto]."
+- **Experiencia relevante** → Un proof point cuantificado. "Lideré [X] que logró [métrica]."
+- **¿Por qué eres buen fit?** → "Estoy en la intersección de [A] y [B], que es exactamente donde vive este rol."
+- **¿Cómo te enteraste?** → Honesto: "Lo encontré en [portal/scan], lo evalué contra mis criterios y puntuó alto."
 
-**Idioma**: Siempre en el idioma del JD (EN default). Aplicar `/tech-translate`.
+**Idioma de las respuestas**: Seguir el idioma del formulario (si el formulario es en inglés, responder en inglés; si es en español, en español).
 
 ## Paso 5 — Actualizar Tracker
 Registrar en `data/applications.md` con todas las columnas incluyendo Report y PDF en ✅.

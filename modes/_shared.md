@@ -143,9 +143,9 @@ If the candidate has a live demo/dashboard (check profile.yml), offer access in 
 3. Cite exact lines from CV when matching
 4. Use WebSearch for comp and company data
 5. Register in tracker after evaluating
-6. Generate content in the language of the JD (EN default)
+6. Generate evaluation reports and all analysis content in Spanish. Only generate content in English when explicitly writing text that will go directly into the application form or CV/PDF (those follow the JD language).
 7. Be direct and actionable -- no fluff
-8. When generating English text (PDF summaries, bullets, LinkedIn messages, STAR stories): native tech English, not translated. Short sentences, action verbs, no unnecessary passive voice.
+8. When generating English text for forms or PDFs: native professional English, not translated. Short sentences, action verbs, no unnecessary passive voice.
 8b. **Case study URLs in PDF Professional Summary:** If the PDF mentions case studies or demos, URLs MUST appear in the first paragraph (Professional Summary). The recruiter may only read the summary. All URLs with `white-space: nowrap` in HTML.
 9. **Tracker additions as TSV** -- NEVER edit applications.md to add new entries. Write TSV in `batch/tracker-additions/` and `merge-tracker.mjs` handles the merge.
 10. **Include `**URL:**` in every report header** -- between Score and PDF.

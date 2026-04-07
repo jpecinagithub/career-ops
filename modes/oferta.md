@@ -64,14 +64,14 @@ Top 5 cambios al CV + Top 5 cambios a LinkedIn para maximizar match.
 
 ## Bloque F — Plan de Entrevistas
 
-6-10 historias STAR+R mapeadas a requisitos del JD (STAR + **Reflection**):
+6-10 historias STAR+R mapeadas a requisitos del JD (STAR + **Reflexión**):
 
-| # | Requisito del JD | Historia STAR+R | S | T | A | R | Reflection |
-|---|-----------------|-----------------|---|---|---|---|------------|
+| # | Requisito del JD | Historia STAR+R | S | T | A | R | Reflexión |
+|---|-----------------|-----------------|---|---|---|---|-----------|
 
-The **Reflection** column captures what was learned or what would be done differently. This signals seniority — junior candidates describe what happened, senior candidates extract lessons.
+La columna **Reflexión** captura qué se aprendió o qué se haría diferente. Señala seniority — los candidatos junior describen lo que pasó, los senior extraen lecciones.
 
-**Story Bank:** If `interview-prep/story-bank.md` exists, check if any of these stories are already there. If not, append new ones. Over time this builds a reusable bank of 5-10 master stories that can be adapted to any interview question.
+**Banco de historias:** Si existe `interview-prep/story-bank.md`, verificar si alguna de estas historias ya está registrada. Si no, añadirlas. Con el tiempo construye un banco reutilizable de 5-10 historias maestras adaptables a cualquier pregunta de entrevista.
 
 **Seleccionadas y enmarcadas según el arquetipo:**
 - FDE → enfatizar velocidad de entrega y client-facing
@@ -129,7 +129,7 @@ Guardar evaluación completa en `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## F) Plan de Entrevistas
 (contenido completo del bloque F)
 
-## G) Draft Application Answers
+## G) Borradores de respuestas para formulario
 (solo si score >= 4.5 — borradores de respuestas para el formulario de aplicación)
 
 ---
