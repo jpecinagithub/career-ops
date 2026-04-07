@@ -1,6 +1,6 @@
 import express from 'express';
 import { existsSync, createReadStream } from 'fs';
-import { startPdfJob, getJobStatus, getPdfPath } from '../services/pdf.js';
+import { startPdfJob, getJobStatus, getPdfPath, generateReportPdf } from '../services/pdf.js';
 import db from '../db/index.js';
 
 const router = express.Router();
@@ -42,6 +42,43 @@ router.get('/download/:jobId', (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${job.pdfPath.split('/').pop().split('\\').pop()}"`);
   createReadStream(job.pdfPath).pipe(res);
+});
+
+// POST /api/pdf/report — generate PDF from evaluation markdown, update application
+router.post('/report', async (req, res) => {
+  try {
+    const { markdown, company, role, score, applicationId } = req.body;
+    if (!markdown) return res.status(400).json({ error: 'markdown es requerido' });
+
+    const pdfPath = await generateReportPdf(
+      markdown,
+      company || 'Empresa',
+      role || 'Puesto',
+      score ?? null,
+      applicationId || null
+    );
+
+    res.json({ ok: true, pdfPath });
+  } catch (err) {
+    console.error('[pdf/report] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/pdf/open/:appId — serve the report PDF for a given application inline
+router.get('/open/:appId', (req, res) => {
+  try {
+    const row = db.runQuery('SELECT pdf_path FROM applications WHERE id = ?', [req.params.appId]);
+    if (!row.length || !row[0].pdf_path) return res.status(404).json({ error: 'PDF no encontrado' });
+    const pdfPath = row[0].pdf_path;
+    if (!existsSync(pdfPath)) return res.status(404).json({ error: 'Archivo no encontrado en disco' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${pdfPath.split(/[\\/]/).pop()}"`);
+    createReadStream(pdfPath).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

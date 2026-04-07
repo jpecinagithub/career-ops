@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import ScoreBadge from '../components/ScoreBadge.jsx';
 import toast from 'react-hot-toast';
-
+import ScoreBadge from '../components/ScoreBadge.jsx';
 const STATUSES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
 
 const STATUS_META = {
@@ -160,7 +159,21 @@ export default function Applications() {
                   <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
                     {app.created_at ? new Date(app.created_at).toLocaleDateString('es-ES') : '—'}
                   </td>
-                  <td style={{ padding: '10px 14px', fontSize: 13 }}>{app.pdf_path ? '✅' : '❌'}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 13 }} onClick={e => e.stopPropagation()}>
+                    {app.pdf_path ? (
+                      <a
+                        href={api.getPdfOpenUrl(app.id)}
+                        target="_blank"
+                        rel="noopener"
+                        title="Ver PDF del informe"
+                        style={{ textDecoration: 'none', fontSize: 16 }}
+                      >
+                        📄
+                      </a>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: '10px 14px' }} onClick={e => e.stopPropagation()}>
                     {app.url && (
                       <a href={app.url} target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--cyan-light)', textDecoration: 'none' }}>↗</a>

@@ -47,6 +47,8 @@ export const api = {
   generatePdf: (applicationId, customHtml) => req('POST', '/pdf/generate', { applicationId, customHtml }),
   getPdfStatus: (jobId) => req('GET', `/pdf/status/${jobId}`),
   getPdfDownloadUrl: (jobId) => `/api/pdf/download/${jobId}`,
+  generateReportPdf: (data) => req('POST', '/pdf/report', data),
+  getPdfOpenUrl: (appId) => `/api/pdf/open/${appId}`,
 
   // Evaluate (non-streaming)
   evaluate: (jdText, url) => req('POST', '/evaluate', { jdText, url }),

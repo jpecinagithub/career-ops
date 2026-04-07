@@ -51,7 +51,8 @@ function SaveModal({ score, url, report, onClose, onSaved }) {
     if (!role.trim()) { toast.error('Introduce el título del puesto'); return; }
     setSaving(true);
     try {
-      await api.createApplication({
+      // 1. Save application
+      const saved = await api.createApplication({
         company: company.trim(),
         role: role.trim(),
         url: jobUrl.trim() || null,
@@ -59,6 +60,25 @@ function SaveModal({ score, url, report, onClose, onSaved }) {
         status: 'Evaluated',
         notes: `Score: ${score}/5 — evaluada desde el panel`,
       });
+
+      // 2. Generate PDF in background — show toast progress
+      const pdfToast = toast.loading('Generando PDF del informe...');
+      api.generateReportPdf({
+        markdown: report,
+        company: company.trim(),
+        role: role.trim(),
+        score,
+        applicationId: saved.id,
+      }).then(() => {
+        toast.dismiss(pdfToast);
+        toast.success('PDF generado ✅');
+        qc.invalidateQueries({ queryKey: ['applications'] });
+        qc.invalidateQueries({ queryKey: ['stats'] });
+      }).catch(() => {
+        toast.dismiss(pdfToast);
+        toast.error('PDF falló — puedes regenerarlo desde aplicaciones');
+      });
+
       qc.invalidateQueries({ queryKey: ['applications'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
       toast.success(`✅ Guardada: ${company.trim()}`);
