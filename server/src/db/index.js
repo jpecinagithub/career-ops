@@ -121,8 +121,9 @@ export function runInsert(sql, params = []) {
 
 export function runUpdate(sql, params = []) {
   db.run(sql, params);
+  const changes = db.getRowsModified(); // read BEFORE saveDb() resets the counter
   saveDb();
-  return { changes: db.getRowsModified() };
+  return { changes };
 }
 
 export default {

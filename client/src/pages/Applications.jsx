@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import toast from 'react-hot-toast';
 import ScoreBadge from '../components/ScoreBadge.jsx';
+import toast from 'react-hot-toast';
+
 const STATUSES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
 
 const STATUS_META = {
@@ -34,7 +35,7 @@ function StatusSelect({ value, onChange, disabled }) {
         border: `1px solid ${meta.color}40`,
         background: meta.bg,
         color: meta.color,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         appearance: 'none',
         WebkitAppearance: 'none',
         paddingRight: 22,
@@ -50,6 +51,68 @@ function StatusSelect({ value, onChange, disabled }) {
         </option>
       ))}
     </select>
+  );
+}
+
+function DeleteButton({ app, onDeleted }) {
+  const [confirming, setConfirming] = useState(false);
+  const qc = useQueryClient();
+
+  const deleteMut = useMutation({
+    mutationFn: () => api.deleteApplication(app.id),
+    onSuccess: () => {
+      toast.success(`Eliminada: ${app.company}`);
+      qc.invalidateQueries({ queryKey: ['applications'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      onDeleted?.();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  if (confirming) {
+    return (
+      <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <button
+          onClick={() => deleteMut.mutate()}
+          disabled={deleteMut.isPending}
+          style={{
+            padding: '3px 8px', fontSize: 11, fontWeight: 700,
+            background: '#ef4444', color: '#fff', border: 'none',
+            borderRadius: 4, cursor: 'pointer',
+          }}
+        >
+          {deleteMut.isPending ? '...' : 'Sí'}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          style={{
+            padding: '3px 8px', fontSize: 11,
+            background: 'var(--bg3)', color: 'var(--text-muted)',
+            border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+          }}
+        >
+          No
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setConfirming(true)}
+      title="Eliminar aplicación y PDF"
+      style={{
+        padding: '3px 7px', fontSize: 13, lineHeight: 1,
+        background: 'transparent', color: 'var(--text-muted)',
+        border: '1px solid transparent', borderRadius: 4,
+        cursor: 'pointer', opacity: 0.5,
+        transition: 'opacity 0.15s, color 0.15s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.color = '#ef4444'; }}
+      onMouseLeave={e => { e.currentTarget.style.opacity = 0.5; e.currentTarget.style.color = 'var(--text-muted)'; }}
+    >
+      🗑
+    </button>
   );
 }
 
@@ -130,14 +193,14 @@ export default function Applications() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg3)', fontSize: 12, color: 'var(--text-muted)' }}>
-                {['#', 'Empresa', 'Rol', 'Score', 'Estado', 'Fecha', 'PDF', ''].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{h}</th>
+                {['#', 'Empresa', 'Rol', 'Score', 'Estado', 'Fecha', 'PDF', '', ''].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {apps.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Sin aplicaciones. Evalúa y guarda una oferta para empezar.</td></tr>
+                <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Sin aplicaciones. Evalúa y guarda una oferta para empezar.</td></tr>
               ) : apps.map((app, i) => (
                 <tr key={app.id}
                   onClick={() => navigate(`/applications/${app.id}`)}
@@ -149,6 +212,8 @@ export default function Applications() {
                   <td style={{ padding: '10px 14px', fontWeight: 500 }}>{app.company}</td>
                   <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: 13, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.role}</td>
                   <td style={{ padding: '10px 14px' }}><ScoreBadge score={app.score} /></td>
+
+                  {/* Status — click stops row navigation */}
                   <td style={{ padding: '10px 14px' }} onClick={e => e.stopPropagation()}>
                     <StatusSelect
                       value={app.status}
@@ -156,9 +221,12 @@ export default function Applications() {
                       disabled={updateMut.isPending}
                     />
                   </td>
+
                   <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
                     {app.created_at ? new Date(app.created_at).toLocaleDateString('es-ES') : '—'}
                   </td>
+
+                  {/* PDF — click stops row navigation */}
                   <td style={{ padding: '10px 14px', fontSize: 13 }} onClick={e => e.stopPropagation()}>
                     {app.pdf_path ? (
                       <a
@@ -174,10 +242,17 @@ export default function Applications() {
                       <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
                     )}
                   </td>
+
+                  {/* Offer URL */}
                   <td style={{ padding: '10px 14px' }} onClick={e => e.stopPropagation()}>
                     {app.url && (
                       <a href={app.url} target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--cyan-light)', textDecoration: 'none' }}>↗</a>
                     )}
+                  </td>
+
+                  {/* Delete */}
+                  <td style={{ padding: '6px 8px' }} onClick={e => e.stopPropagation()}>
+                    <DeleteButton app={app} />
                   </td>
                 </tr>
               ))}

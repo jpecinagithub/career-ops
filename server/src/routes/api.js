@@ -1,6 +1,7 @@
 import express from 'express';
 import { evaluate, saveApplication, getApplications, getApplicationById, updateApplication, getStats } from '../services/evaluator.js';
 import { importApplicationsMd } from '../services/importer.js';
+import db from '../db/index.js';
 
 const router = express.Router();
 
@@ -119,6 +120,30 @@ router.patch('/applications/:id', (req, res) => {
     res.json({ success: true, changes: result.changes });
   } catch (error) {
     console.error('Error updating application:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/applications/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Get pdf_path before deleting so we can remove the file
+    const row = db.runQuery('SELECT pdf_path FROM applications WHERE id = ?', [id]);
+    const pdfPath = row[0]?.pdf_path || null;
+
+    db.runUpdate('DELETE FROM applications WHERE id = ?', [id]);
+
+    // Remove PDF file from disk if it exists
+    if (pdfPath) {
+      try {
+        const { unlinkSync, existsSync } = await import('fs');
+        if (existsSync(pdfPath)) unlinkSync(pdfPath);
+      } catch {}
+    }
+
+    res.json({ success: true, deleted: id });
+  } catch (error) {
+    console.error('Error deleting application:', error);
     res.status(500).json({ error: error.message });
   }
 });

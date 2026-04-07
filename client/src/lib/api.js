@@ -24,6 +24,7 @@ export const api = {
   createApplication: (data) => req('POST', '/applications', data),
   updateApplication: (id, data) => req('PATCH', `/applications/${id}`, data),
   deleteApplication: (id) => req('DELETE', `/applications/${id}`),
+
   getStats: () => req('GET', '/stats'),
 
   // Pipeline

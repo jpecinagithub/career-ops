@@ -52,14 +52,13 @@ export async function importApplicationsMd() {
       : null;
 
     if (existing.length > 0) {
-      // Update status, score, notes, report_path from the markdown (source of truth for those fields)
+      // Update score, notes, report_path from markdown — but NOT status.
+      // Status is owned by the frontend (user changes it via the dashboard).
       db.runUpdate(
-        `UPDATE applications SET score = ?, status = ?, pdf_path = ?, report_path = ?, notes = ?
+        `UPDATE applications SET score = ?, report_path = ?, notes = ?
          WHERE company = ? AND role = ?`,
         [
           row.score,
-          row.status || 'Evaluated',
-          pdfPath,
           row.reportPath || null,
           row.notes,
           row.company,
