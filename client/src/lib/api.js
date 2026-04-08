@@ -57,6 +57,10 @@ export const api = {
   // Auto-process pipeline
   getProcessStatus: () => req('GET', '/process/status'),
 
+  // CV & Cover Letter generation
+  getCvUrl: (appId) => `/api/cvgen/cv/${appId}`,
+  getCoverLetterUrl: (appId) => `/api/cvgen/cover/${appId}`,
+
   // Health
   health: () => fetch('/health').then(r => r.json()),
 };

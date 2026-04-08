@@ -67,6 +67,8 @@ export async function initDb() {
   // Migration: add columns if they don't exist (safe on existing DBs)
   try { db.run('ALTER TABLE pipeline_urls ADD COLUMN location TEXT'); } catch {}
   try { db.run('ALTER TABLE pipeline_urls ADD COLUMN job_type TEXT'); } catch {}
+  try { db.run('ALTER TABLE applications ADD COLUMN cv_path TEXT'); } catch {}
+  try { db.run('ALTER TABLE applications ADD COLUMN cover_letter_path TEXT'); } catch {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS scan_history (

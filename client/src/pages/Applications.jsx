@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import ScoreBadge from '../components/ScoreBadge.jsx';
 import toast from 'react-hot-toast';
 
-const STATUSES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
+const STATUSES = ['Evaluated', 'Selected', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
 
 const STATUS_META = {
   Evaluated:  { color: '#6366f1', bg: '#6366f120', label: 'Evaluada' },
+  Selected:   { color: '#f97316', bg: '#f9731620', label: 'Seleccionada' },
   Applied:    { color: '#0ea5e9', bg: '#0ea5e920', label: 'Aplicada' },
   Responded:  { color: '#f59e0b', bg: '#f59e0b20', label: 'Respondió' },
   Interview:  { color: '#8b5cf6', bg: '#8b5cf620', label: 'Entrevista' },
@@ -116,8 +117,125 @@ function DeleteButton({ app, onDeleted }) {
   );
 }
 
+function CvGenModal({ app, onClose, onDone }) {
+  const [log, setLog] = useState([]);
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(false);
+  const abortRef = useRef(null);
+  const qc = useQueryClient();
+
+  const start = () => {
+    setRunning(true);
+    setLog([{ text: `🚀 Generating tailored CV & Cover Letter for ${app.company}...`, color: 'var(--cyan-light)' }]);
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    fetch(`/api/cvgen/${app.id}`, { method: 'POST', signal: ctrl.signal })
+      .then(async (res) => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done: d, value } = await reader.read();
+          if (d) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const ev = JSON.parse(line.slice(6));
+              if (ev.type === 'log') {
+                setLog(l => [...l, { text: ev.msg, color: 'var(--text-muted)' }]);
+              } else if (ev.type === 'done') {
+                setLog(l => [...l, { text: '✅ Done! CV and Cover Letter are ready.', color: '#10b981', bold: true }]);
+                setRunning(false);
+                setDone(true);
+                qc.invalidateQueries({ queryKey: ['applications'] });
+                toast.success('CV & Cover Letter generados ✅');
+                onDone?.();
+              } else if (ev.type === 'error') {
+                setLog(l => [...l, { text: `❌ Error: ${ev.msg}`, color: '#ef4444' }]);
+                setRunning(false);
+              }
+            } catch {}
+          }
+        }
+        setRunning(false);
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          setLog(l => [...l, { text: `❌ ${err.message}`, color: '#ef4444' }]);
+          toast.error(err.message);
+        }
+        setRunning(false);
+      });
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: 500, display: 'flex', flexDirection: 'column', gap: 16 }} onClick={e => e.stopPropagation()}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>Generar CV & Cover Letter</h2>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{app.company} — {app.role}</div>
+          </div>
+          <button onClick={() => { abortRef.current?.abort(); onClose(); }} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        {!running && !done && (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            La IA generará un <strong style={{ color: 'var(--text)' }}>CV personalizado</strong> y una <strong style={{ color: 'var(--text)' }}>carta de presentación</strong> ajustados a los requisitos de esta oferta.
+            <br /><br />
+            Tiempo estimado: <strong style={{ color: 'var(--text)' }}>~1 minuto</strong>
+          </div>
+        )}
+
+        {log.length > 0 && (
+          <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.8, background: 'var(--bg)', borderRadius: 6, padding: '10px 14px', maxHeight: 180, overflowY: 'auto' }}>
+            {log.map((e, i) => (
+              <div key={i} style={{ color: e.color, fontWeight: e.bold ? 700 : 400 }}>{e.text}</div>
+            ))}
+            {running && <span style={{ display: 'inline-block', width: 8, height: 12, background: 'var(--cyan)', animation: 'blink 1s infinite', borderRadius: 1 }} />}
+          </div>
+        )}
+
+        {done && (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <a href={api.getCvUrl(app.id)} target="_blank" rel="noopener" style={{ flex: 1, padding: '9px 0', textAlign: 'center', background: '#1d4ed8', color: '#fff', borderRadius: 6, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+              📄 Abrir CV
+            </a>
+            <a href={api.getCoverLetterUrl(app.id)} target="_blank" rel="noopener" style={{ flex: 1, padding: '9px 0', textAlign: 'center', background: '#7c3aed', color: '#fff', borderRadius: 6, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+              ✉️ Abrir Cover Letter
+            </a>
+          </div>
+        )}
+
+        {!running && !done && (
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '9px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={start} style={{ padding: '9px 18px', background: '#7c3aed', border: 'none', color: '#fff', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              🤖 Generar
+            </button>
+          </div>
+        )}
+
+        <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+      </div>
+    </div>
+  );
+}
+
 export default function Applications() {
   const [filters, setFilters] = useState({ status: '', minScore: '', company: '' });
+  const [cvGenApp, setCvGenApp] = useState(null);
+  const [showBulkPanel, setShowBulkPanel] = useState(false);
+  const [bulkLog, setBulkLog] = useState([]);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkStats, setBulkStats] = useState(null);
+  const bulkAbortRef = useRef(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -148,12 +266,114 @@ export default function Applications() {
 
   const setF = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
+  const handleBulkGenerate = () => {
+    setShowBulkPanel(true);
+    setBulkRunning(true);
+    setBulkLog([{ text: 'Iniciando generación en bulk...', color: '#7c3aed' }]);
+    setBulkStats(null);
+
+    const ctrl = new AbortController();
+    bulkAbortRef.current = ctrl;
+
+    fetch('/api/cvgen/bulk', { method: 'POST', signal: ctrl.signal })
+      .then(async (res) => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n'); buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const ev = JSON.parse(line.slice(6));
+              if (ev.type === 'start') {
+                setBulkLog([{ text: `Generando CV para ${ev.total} aplicaciones...`, color: '#7c3aed' }]);
+              } else if (ev.type === 'item_start') {
+                setBulkLog(l => [...l, { text: `\n[${ev.current}/${ev.total}] ${ev.company} — ${ev.role}`, color: 'var(--text)', bold: true }]);
+              } else if (ev.type === 'log') {
+                setBulkLog(l => [...l, { text: `  ${ev.msg}`, color: 'var(--text-muted)' }]);
+              } else if (ev.type === 'done') {
+                setBulkLog(l => [...l, { text: '  CV y Cover Letter generados', color: '#10b981' }]);
+                qc.invalidateQueries({ queryKey: ['applications'] });
+              } else if (ev.type === 'item_error') {
+                setBulkLog(l => [...l, { text: `  Error: ${ev.error}`, color: '#ef4444' }]);
+              } else if (ev.type === 'progress') {
+                setBulkStats({ done: ev.done, errors: ev.errors, total: ev.total });
+              } else if (ev.type === 'complete') {
+                setBulkStats({ done: ev.done, errors: ev.errors, total: ev.total });
+                setBulkLog(l => [...l, { text: `\nCompletado: ${ev.done} CVs generados, ${ev.errors} errores`, color: '#10b981', bold: true }]);
+                setBulkRunning(false);
+                qc.invalidateQueries({ queryKey: ['applications'] });
+                toast.success(`${ev.done} CVs generados`);
+              } else if (ev.type === 'error') {
+                setBulkLog(l => [...l, { text: `Error: ${ev.msg}`, color: '#ef4444' }]);
+                setBulkRunning(false);
+              }
+            } catch {}
+          }
+        }
+        setBulkRunning(false);
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') toast.error(err.message);
+        setBulkRunning(false);
+      });
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700 }}>Aplicaciones</h1>
-        <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{apps.length} registros</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {apps.some(a => !a.cv_path) && (
+            <button
+              onClick={handleBulkGenerate}
+              disabled={bulkRunning}
+              style={{ padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: bulkRunning ? 'var(--bg3)' : '#7c3aed', color: '#fff', border: 'none', cursor: bulkRunning ? 'not-allowed' : 'pointer' }}
+            >
+              {bulkRunning ? '⏳ Generando...' : '🤖 Generar CV para todas'}
+            </button>
+          )}
+          <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{apps.length} registros</span>
+        </div>
       </div>
+
+      {/* Bulk CV generation panel */}
+      {showBulkPanel && (
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${bulkRunning ? '#7c3aed44' : 'var(--border)'}`, borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: bulkRunning ? '#7c3aed' : '#10b981' }}>
+              {bulkRunning ? '⏳ Generando CVs...' : '✅ Generación completada'}
+            </span>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              {bulkStats && (
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {bulkStats.done}/{bulkStats.total} completados {bulkStats.errors > 0 && `· ${bulkStats.errors} errores`}
+                </span>
+              )}
+              {bulkStats && bulkStats.total > 0 && (
+                <div style={{ width: 100, height: 5, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: '#10b981', borderRadius: 3, transition: 'width 0.3s', width: `${Math.round(((bulkStats.done + bulkStats.errors) / bulkStats.total) * 100)}%` }} />
+                </div>
+              )}
+              {!bulkRunning && (
+                <button onClick={() => setShowBulkPanel(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+              )}
+            </div>
+          </div>
+          <div style={{ fontFamily: 'monospace', fontSize: 11.5, lineHeight: 1.7, background: 'var(--bg)', borderRadius: 6, padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
+            {bulkLog.map((e, i) => (
+              <div key={i} style={{ color: e.color, fontWeight: e.bold ? 700 : 400, whiteSpace: 'pre-wrap' }}>{e.text}</div>
+            ))}
+            {bulkRunning && <span style={{ display: 'inline-block', width: 7, height: 11, background: '#7c3aed', animation: 'blink 1s infinite', borderRadius: 1 }} />}
+          </div>
+        </div>
+      )}
+
+      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -193,7 +413,7 @@ export default function Applications() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg3)', fontSize: 12, color: 'var(--text-muted)' }}>
-                {['#', 'Empresa', 'Rol', 'Score', 'Estado', 'Fecha', 'PDF', '', ''].map((h, i) => (
+                {['#', 'Empresa', 'Rol', 'Score', 'Estado', 'Fecha', 'Docs', 'CV', 'CL', '', ''].map((h, i) => (
                   <th key={i} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
@@ -226,25 +446,43 @@ export default function Applications() {
                     {app.created_at ? new Date(app.created_at).toLocaleDateString('es-ES') : '—'}
                   </td>
 
-                  {/* PDF — click stops row navigation */}
-                  <td style={{ padding: '10px 14px', fontSize: 13 }} onClick={e => e.stopPropagation()}>
+                  {/* Docs: Report PDF */}
+                  <td style={{ padding: '10px 10px', fontSize: 14 }} onClick={e => e.stopPropagation()}>
                     {app.pdf_path ? (
-                      <a
-                        href={api.getPdfOpenUrl(app.id)}
-                        target="_blank"
-                        rel="noopener"
-                        title="Ver PDF del informe"
-                        style={{ textDecoration: 'none', fontSize: 16 }}
-                      >
-                        📄
-                      </a>
+                      <a href={api.getPdfOpenUrl(app.id)} target="_blank" rel="noopener" title="Ver informe de evaluación" style={{ textDecoration: 'none' }}>📊</a>
                     ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>—</span>
+                    )}
+                  </td>
+
+                  {/* CV PDF */}
+                  <td style={{ padding: '10px 10px', fontSize: 14 }} onClick={e => e.stopPropagation()}>
+                    {app.cv_path ? (
+                      <a href={api.getCvUrl(app.id)} target="_blank" rel="noopener" title="Ver CV personalizado" style={{ textDecoration: 'none' }}>📄</a>
+                    ) : (
+                      <button
+                        onClick={() => setCvGenApp(app)}
+                        title="Generar CV & Cover Letter"
+                        style={{ background: 'none', border: '1px solid #7c3aed44', borderRadius: 4, color: '#7c3aed', fontSize: 11, padding: '2px 6px', cursor: 'pointer', opacity: 0.6, transition: 'opacity 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                        onMouseLeave={e => e.currentTarget.style.opacity = 0.6}
+                      >
+                        +CV
+                      </button>
+                    )}
+                  </td>
+
+                  {/* Cover Letter PDF */}
+                  <td style={{ padding: '10px 10px', fontSize: 14 }} onClick={e => e.stopPropagation()}>
+                    {app.cover_letter_path ? (
+                      <a href={api.getCoverLetterUrl(app.id)} target="_blank" rel="noopener" title="Ver cover letter" style={{ textDecoration: 'none' }}>✉️</a>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>—</span>
                     )}
                   </td>
 
                   {/* Offer URL */}
-                  <td style={{ padding: '10px 14px' }} onClick={e => e.stopPropagation()}>
+                  <td style={{ padding: '10px 10px' }} onClick={e => e.stopPropagation()}>
                     {app.url && (
                       <a href={app.url} target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--cyan-light)', textDecoration: 'none' }}>↗</a>
                     )}
@@ -259,6 +497,14 @@ export default function Applications() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {cvGenApp && (
+        <CvGenModal
+          app={cvGenApp}
+          onClose={() => setCvGenApp(null)}
+          onDone={() => setCvGenApp(null)}
+        />
       )}
     </div>
   );
