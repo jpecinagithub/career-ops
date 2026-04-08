@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) installed and configured
-- Node.js 18+ (for PDF generation and utility scripts)
+- Node.js 18+ (for the backend and utility scripts)
+- For the original Claude Code version: Claude Code installed and configured
 - (Optional) Go 1.21+ (for the dashboard TUI)
 
 ## Quick Start (5 steps)
@@ -11,7 +11,7 @@
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/santifer/career-ops.git
+git clone https://github.com/anomalyco/career-ops.git
 cd career-ops
 npm install
 npx playwright install chromium   # Required for PDF generation
@@ -42,27 +42,31 @@ Edit `portals.yml`:
 - Add companies you want to track in `tracked_companies`
 - Customize `search_queries` for your preferred job boards
 
-### 5. Start using
-
-Open Claude Code in this directory:
+### 5. Start the backend
 
 ```bash
-claude
+cd server
+node src/index.js
 ```
 
-Then paste a job offer URL or description. Career-ops will automatically evaluate it, generate a report, create a tailored PDF, and track it.
+Then in another terminal, start the frontend:
 
-## Available Commands
+```bash
+cd client
+npm run dev
+```
 
-| Action | How |
-|--------|-----|
-| Evaluate an offer | Paste a URL or JD text |
-| Search for offers | `/career-ops scan` |
-| Process pending URLs | `/career-ops pipeline` |
-| Generate a PDF | `/career-ops pdf` |
-| Batch evaluate | `/career-ops batch` |
-| Check tracker status | `/career-ops tracker` |
-| Fill application form | `/career-ops apply` |
+Open http://localhost:5173 to use the application.
+
+## Available Endpoints
+
+| Action | Endpoint |
+|--------|---------|
+| Evaluate an offer | POST /api/evaluate |
+| Search for offers | POST /api/scan |
+| Process pending URLs | POST /api/pipeline/process |
+| Generate a PDF | POST /api/cvgen/pdf |
+| Check tracker status | GET /api/stats |
 
 ## Verify Setup
 

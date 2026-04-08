@@ -2,7 +2,7 @@
 
 **[:gb: English](#what-is-this)** | **[:es: Español](#es-versión-en-español)**
 
-> AI-powered job search pipeline built on Claude Code. Evaluate offers, generate tailored CVs, scan portals, and track everything -- powered by AI agents.
+> AI-powered job search pipeline. Evaluate offers, generate tailored CVs, scan portals, and track everything -- powered by AI.
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-000?style=flat&logo=anthropic&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat&logo=node.js&logoColor=white)
@@ -28,7 +28,7 @@ Career-Ops turns Claude Code into a full job search command center. Instead of m
 
 > **Important: This is NOT a spray-and-pray tool.** The whole point is to apply only where there's a real match -- for your sake and for the recruiter reading your application. The scoring system helps you focus on high-fit opportunities instead of wasting everyone's time. Always review before submitting.
 
-Built by someone who used it to evaluate 740+ job offers, generate 100+ tailored CVs, and land a Head of Applied AI role. [Read the full case study](https://santifer.io/career-ops-system).
+AI-powered job search pipeline with React frontend and Node.js backend with Qwen LLM integration.
 
 ## Features
 
@@ -48,7 +48,7 @@ Built by someone who used it to evaluate 740+ job offers, generate 100+ tailored
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/santifer/career-ops.git
+git clone https://github.com/anomalyco/career-ops.git
 cd career-ops && npm install
 npx playwright install chromium   # Required for PDF generation
 
@@ -194,13 +194,11 @@ career-ops/
 
 ## Also Open Source
 
-- **[cv-santiago](https://github.com/santifer/cv-santiago)** -- The portfolio website (santifer.io) with AI chatbot, LLMOps dashboard, and case studies. If you need a portfolio to showcase alongside your job search, fork it and make it yours.
+If you want a portfolio to showcase alongside your job search, you can create your own portfolio website.
 
-## About the Author
+## About
 
-I'm Santiago -- Head of Applied AI, former founder (built and sold a business that still runs with my name on it). I built career-ops to manage my own job search. It worked: I used it to land my current role.
-
-My portfolio and other open source projects → [santifer.io](https://santifer.io)
+This project helps manage job search with AI-powered tools.
 
 ## License
 
@@ -222,13 +220,11 @@ Career-Ops convierte Claude Code en un centro de mando de busqueda de empleo. En
 
 > **Importante: Esto NO es para spamear empresas.** El objetivo es aplicar solo donde hay match real -- por tu bien y por el de quien lea tu aplicacion. El scoring te ayuda a centrarte en las oportunidades de alto fit en vez de perder el tiempo de todos. Siempre revisa antes de enviar.
 
-Construido por alguien que lo uso para evaluar 740+ ofertas, generar 100+ CVs personalizados, y conseguir un rol de Head of Applied AI. [Lee el case study completo](https://santifer.io/career-ops).
-
 ## Inicio rapido
 
 ```bash
 # 1. Clonar
-git clone https://github.com/santifer/career-ops.git
+git clone https://github.com/anomalyco/career-ops.git
 cd career-ops && npm install
 
 # 2. Configurar
@@ -291,7 +287,7 @@ O simplemente pega una URL o descripcion de oferta -- career-ops la detecta y ej
 
 ## Tambien Open Source
 
-- **[cv-santiago](https://github.com/santifer/cv-santiago)** -- El portfolio (santifer.io) con chatbot IA, dashboard LLMOps y case studies. Si necesitas un portfolio para acompañar tu busqueda de empleo, echale un vistazo.
+Si necesitas un portfolio para tu busqueda de empleo, puedes crear el tuyo propio.
 
 ## Documentacion
 
@@ -300,7 +296,3 @@ O simplemente pega una URL o descripcion de oferta -- career-ops la detecta y ej
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) -- Como funciona el sistema
 
 ## Let's Connect
-
-[![Website](https://img.shields.io/badge/santifer.io-000?style=for-the-badge&logo=safari&logoColor=white)](https://santifer.io)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/santifer)
-[![Email](https://img.shields.io/badge/Email-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:hola@santifer.io)

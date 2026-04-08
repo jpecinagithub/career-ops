@@ -1,6 +1,6 @@
 # Contributing to Career-Ops
 
-Thanks for your interest in contributing! Career-Ops is built with Claude Code, and you can use it for development too.
+Thanks for your interest in contributing!
 
 ## Before Submitting a PR
 
@@ -27,39 +27,36 @@ PRs without a corresponding issue may be closed if they don't align with the pro
 ## What to Contribute
 
 **Good first contributions:**
-- Add companies to `templates/portals.example.yml`
-- Translate modes to other languages
+- Add companies to `portals.yml`
 - Improve documentation
-- Add example CVs for different roles (in `examples/`)
-- Report bugs via [Issues](https://github.com/santifer/career-ops/issues)
+- Report bugs via [Issues](https://github.com/anomalyco/career-ops/issues)
 
 **Bigger contributions:**
 - New evaluation dimensions or scoring logic
-- Dashboard TUI features (in `dashboard/`)
-- New skill modes (in `modes/`)
-- Script improvements (`.mjs` utilities)
+- Frontend UI improvements
+- New services in backend
+- Script improvements
 
 ## Guidelines
 
-- Keep modes language-agnostic when possible (Claude handles both EN and ES)
-- Scripts should handle missing files gracefully (check `existsSync` before `readFileSync`)
-- Dashboard changes require `go build` — test with real data before submitting
+- Keep the codebase clean and minimal
+- Test any new functionality
 - Don't commit personal data (cv.md, profile.yml, applications.md, reports/)
 
 ## Development
 
 ```bash
-# Scripts
-node verify-pipeline.mjs     # Health check
-node cv-sync-check.mjs        # Config check
+# Backend
+cd server && node src/index.js
 
-# Dashboard
-cd dashboard && go build -o career-dashboard .
-./career-dashboard --path .
+# Frontend
+cd client && npm run dev
+
+# Health check
+curl http://localhost:3001/health
 ```
 
 ## Need Help?
 
-- [Open an issue](https://github.com/santifer/career-ops/issues)
+- [Open an issue](https://github.com/anomalyco/career-ops/issues)
 - [Read the architecture docs](docs/ARCHITECTURE.md)
-- Built by [santifer](https://santifer.io)

@@ -1,4 +1,4 @@
-const BASE = '/api';
+export const BASE = '/api';
 
 async function req(method, path, body) {
   const opts = {
