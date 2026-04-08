@@ -34,7 +34,7 @@ function StatusSelect({ value, onChange, disabled }) {
         fontSize: 12,
         fontWeight: 600,
         border: `1px solid ${meta.color}40`,
-        background: meta.bg,
+        backgroundColor: meta.bg,
         color: meta.color,
         cursor: disabled ? 'not-allowed' : 'pointer',
         appearance: 'none',
@@ -236,6 +236,11 @@ export default function Applications() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkStats, setBulkStats] = useState(null);
   const bulkAbortRef = useRef(null);
+  const [showApplyPanel, setShowApplyPanel] = useState(false);
+  const [applyLog, setApplyLog] = useState([]);
+  const [applyRunning, setApplyRunning] = useState(false);
+  const [applyStats, setApplyStats] = useState(null);
+  const applyAbortRef = useRef(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -323,6 +328,65 @@ export default function Applications() {
       });
   };
 
+  const handleBulkApply = () => {
+    setShowApplyPanel(true);
+    setApplyRunning(true);
+    setApplyLog([{ text: 'Iniciando envío automático de aplicaciones...', color: '#0ea5e9' }]);
+    setApplyStats(null);
+
+    const ctrl = new AbortController();
+    applyAbortRef.current = ctrl;
+
+    fetch('/api/apply/all', { method: 'POST', signal: ctrl.signal })
+      .then(async (res) => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n'); buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const ev = JSON.parse(line.slice(6));
+              if (ev.type === 'start') {
+                setApplyLog([{ text: `Aplicando a ${ev.total} ofertas seleccionadas...`, color: '#0ea5e9' }]);
+              } else if (ev.type === 'item_start') {
+                setApplyLog(l => [...l, { text: `\n[${ev.current}/${ev.total}] ${ev.company} — ${ev.role}`, color: 'var(--text)', bold: true }]);
+              } else if (ev.type === 'log') {
+                setApplyLog(l => [...l, { text: `  ${ev.msg}`, color: 'var(--text-muted)' }]);
+              } else if (ev.type === 'applied') {
+                setApplyLog(l => [...l, { text: `  ✅ Aplicación enviada`, color: '#10b981' }]);
+                qc.invalidateQueries({ queryKey: ['applications'] });
+              } else if (ev.type === 'login_required') {
+                setApplyLog(l => [...l, { text: `  ⚠️ Requiere login — omitida`, color: '#f59e0b' }]);
+              } else if (ev.type === 'item_error') {
+                setApplyLog(l => [...l, { text: `  ❌ Error: ${ev.error}`, color: '#ef4444' }]);
+              } else if (ev.type === 'progress') {
+                setApplyStats({ done: ev.done, errors: ev.errors, total: ev.total });
+              } else if (ev.type === 'complete') {
+                setApplyStats({ done: ev.done, errors: ev.errors, total: ev.total });
+                setApplyLog(l => [...l, { text: `\nCompletado: ${ev.done} aplicaciones enviadas, ${ev.errors} errores`, color: '#10b981', bold: true }]);
+                setApplyRunning(false);
+                qc.invalidateQueries({ queryKey: ['applications'] });
+                toast.success(`${ev.done} aplicaciones enviadas`);
+              } else if (ev.type === 'error') {
+                setApplyLog(l => [...l, { text: `Error: ${ev.msg}`, color: '#ef4444' }]);
+                setApplyRunning(false);
+              }
+            } catch {}
+          }
+        }
+        setApplyRunning(false);
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') toast.error(err.message);
+        setApplyRunning(false);
+      });
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -335,6 +399,15 @@ export default function Applications() {
               style={{ padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: bulkRunning ? 'var(--bg3)' : '#7c3aed', color: '#fff', border: 'none', cursor: bulkRunning ? 'not-allowed' : 'pointer' }}
             >
               {bulkRunning ? '⏳ Generando...' : '🤖 Generar CV para todas'}
+            </button>
+          )}
+          {apps.some(a => a.status === 'Selected' && a.cv_path && a.cover_letter_path) && (
+            <button
+              onClick={handleBulkApply}
+              disabled={applyRunning}
+              style={{ padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: applyRunning ? 'var(--bg3)' : '#0ea5e9', color: '#fff', border: 'none', cursor: applyRunning ? 'not-allowed' : 'pointer' }}
+            >
+              {applyRunning ? '⏳ Aplicando...' : '🚀 Aplicar seleccionadas'}
             </button>
           )}
           <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{apps.length} registros</span>
@@ -369,6 +442,38 @@ export default function Applications() {
               <div key={i} style={{ color: e.color, fontWeight: e.bold ? 700 : 400, whiteSpace: 'pre-wrap' }}>{e.text}</div>
             ))}
             {bulkRunning && <span style={{ display: 'inline-block', width: 7, height: 11, background: '#7c3aed', animation: 'blink 1s infinite', borderRadius: 1 }} />}
+          </div>
+        </div>
+      )}
+
+      {/* Apply panel */}
+      {showApplyPanel && (
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${applyRunning ? '#0ea5e944' : 'var(--border)'}`, borderRadius: 10, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: applyRunning ? '#0ea5e9' : '#10b981' }}>
+              {applyRunning ? '⏳ Enviando aplicaciones...' : '✅ Proceso completado'}
+            </span>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              {applyStats && (
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {applyStats.done}/{applyStats.total} enviadas {applyStats.errors > 0 && `· ${applyStats.errors} errores`}
+                </span>
+              )}
+              {applyStats && applyStats.total > 0 && (
+                <div style={{ width: 100, height: 5, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: '#0ea5e9', borderRadius: 3, transition: 'width 0.3s', width: `${Math.round(((applyStats.done + applyStats.errors) / applyStats.total) * 100)}%` }} />
+                </div>
+              )}
+              {!applyRunning && (
+                <button onClick={() => setShowApplyPanel(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+              )}
+            </div>
+          </div>
+          <div style={{ fontFamily: 'monospace', fontSize: 11.5, lineHeight: 1.7, background: 'var(--bg)', borderRadius: 6, padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
+            {applyLog.map((e, i) => (
+              <div key={i} style={{ color: e.color, fontWeight: e.bold ? 700 : 400, whiteSpace: 'pre-wrap' }}>{e.text}</div>
+            ))}
+            {applyRunning && <span style={{ display: 'inline-block', width: 7, height: 11, background: '#0ea5e9', animation: 'blink 1s infinite', borderRadius: 1 }} />}
           </div>
         </div>
       )}

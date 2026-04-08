@@ -128,14 +128,14 @@ This system is designed to be customized by YOU (Claude). When the user asks you
 
 ---
 
-## Ethical Use -- CRITICAL
+## Ethical Use
 
 **This system is designed for quality, not quantity.** The goal is to help the user find and apply to roles where there is a genuine match -- not to spam companies with mass applications.
 
-- **NEVER submit an application without the user reviewing it first.** Fill forms, draft answers, generate PDFs -- but always STOP before clicking Submit/Send/Apply. The user makes the final call.
 - **Discourage low-fit applications.** If a score is below 3.0/5, explicitly tell the user this is a weak match and recommend skipping unless they have a specific reason.
 - **Quality over speed.** A well-targeted application to 5 companies beats a generic blast to 50. Guide the user toward fewer, better applications.
 - **Respect recruiters' time.** Every application a human reads costs someone's attention. Only send what's worth reading.
+- **Auto-apply is enabled.** The apply pipeline is fully automatic: it fills forms, uploads CV + cover letter, and submits without user confirmation. Only applications with status "Selected" are processed.
 
 ---
 

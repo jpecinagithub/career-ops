@@ -556,10 +556,10 @@ export async function generateCvAndCoverLetter(applicationId, emit) {
   writeFileSync(clHtmlPath, clHtml, 'utf-8');
   await htmlToPdf(clHtml, clPdfPath);
 
-  // Save paths to DB
+  // Save paths + promote status to Selected
   db.runUpdate(
-    'UPDATE applications SET cv_path = ?, cover_letter_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [cvPdfPath, clPdfPath, applicationId]
+    'UPDATE applications SET cv_path = ?, cover_letter_path = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [cvPdfPath, clPdfPath, 'Selected', applicationId]
   );
 
   emit({ type: 'done', cvPath: cvPdfPath, clPath: clPdfPath });
