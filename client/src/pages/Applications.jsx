@@ -5,12 +5,14 @@ import { api } from '../lib/api.js';
 import ScoreBadge from '../components/ScoreBadge.jsx';
 import toast from 'react-hot-toast';
 
-const STATUSES = ['Evaluated', 'Selected', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
+const STATUSES = ['Evaluated', 'Selected', 'Applied', 'Unconfirmed', 'Failed', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
 
 const STATUS_META = {
-  Evaluated:  { color: '#6366f1', bg: '#6366f120', label: 'Evaluada' },
-  Selected:   { color: '#f97316', bg: '#f9731620', label: 'Seleccionada' },
-  Applied:    { color: '#0ea5e9', bg: '#0ea5e920', label: 'Aplicada' },
+  Evaluated:    { color: '#6366f1', bg: '#6366f120', label: 'Evaluada' },
+  Selected:     { color: '#f97316', bg: '#f9731620', label: 'Seleccionada' },
+  Applied:      { color: '#0ea5e9', bg: '#0ea5e920', label: 'Aplicada' },
+  Unconfirmed:  { color: '#f59e0b', bg: '#f59e0b20', label: 'Sin confirmar' },
+  Failed:       { color: '#ef4444', bg: '#ef444420', label: 'Fallida' },
   Responded:  { color: '#f59e0b', bg: '#f59e0b20', label: 'Respondió' },
   Interview:  { color: '#8b5cf6', bg: '#8b5cf620', label: 'Entrevista' },
   Offer:      { color: '#10b981', bg: '#10b98120', label: 'Oferta' },
@@ -358,20 +360,33 @@ export default function Applications() {
               } else if (ev.type === 'log') {
                 setApplyLog(l => [...l, { text: `  ${ev.msg}`, color: 'var(--text-muted)' }]);
               } else if (ev.type === 'applied') {
-                setApplyLog(l => [...l, { text: `  ✅ Aplicación enviada`, color: '#10b981' }]);
+                setApplyLog(l => [...l, { text: `  ✅ Confirmación recibida — Applied`, color: '#10b981' }]);
                 qc.invalidateQueries({ queryKey: ['applications'] });
-              } else if (ev.type === 'login_required') {
-                setApplyLog(l => [...l, { text: `  ⚠️ Requiere login — omitida`, color: '#f59e0b' }]);
+              } else if (ev.type === 'unconfirmed') {
+                setApplyLog(l => [...l, { text: `  ⚠️ Submit clickado sin confirmación — marcada como Sin confirmar. Revisa manualmente.`, color: '#f59e0b' }]);
+                qc.invalidateQueries({ queryKey: ['applications'] });
+              } else if (ev.type === 'failed') {
+                const reasons = {
+                  login_required:  '⚠️ Requiere login',
+                  no_submit_button: '⚠️ Botón submit no encontrado',
+                  error: '❌ Error inesperado',
+                };
+                const label = reasons[ev.reason] || '⚠️ Fallo desconocido';
+                setApplyLog(l => [...l, { text: `  ${label} → marcada como Fallida`, color: '#ef4444' }]);
+                qc.invalidateQueries({ queryKey: ['applications'] });
               } else if (ev.type === 'item_error') {
                 setApplyLog(l => [...l, { text: `  ❌ Error: ${ev.error}`, color: '#ef4444' }]);
               } else if (ev.type === 'progress') {
                 setApplyStats({ done: ev.done, errors: ev.errors, total: ev.total });
               } else if (ev.type === 'complete') {
                 setApplyStats({ done: ev.done, errors: ev.errors, total: ev.total });
-                setApplyLog(l => [...l, { text: `\nCompletado: ${ev.done} aplicaciones enviadas, ${ev.errors} errores`, color: '#10b981', bold: true }]);
+                const summary = ev.errors > 0
+                  ? `\nCompletado: ${ev.done} enviadas ✅  |  ${ev.errors} fallidas ❌`
+                  : `\nCompletado: ${ev.done} aplicaciones enviadas ✅`;
+                setApplyLog(l => [...l, { text: summary, color: ev.errors > 0 ? '#f59e0b' : '#10b981', bold: true }]);
                 setApplyRunning(false);
                 qc.invalidateQueries({ queryKey: ['applications'] });
-                toast.success(`${ev.done} aplicaciones enviadas`);
+                toast.success(`${ev.done} enviadas${ev.errors > 0 ? ` · ${ev.errors} fallidas` : ''}`);
               } else if (ev.type === 'error') {
                 setApplyLog(l => [...l, { text: `Error: ${ev.msg}`, color: '#ef4444' }]);
                 setApplyRunning(false);

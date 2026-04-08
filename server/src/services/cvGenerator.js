@@ -141,10 +141,10 @@ Return EXACTLY this JSON (no other text):
     "English – Professional Working Proficiency"
   ],
   "cover_letter": {
-    "opening": "Opening paragraph: strong hook + specific reason why THIS company and THIS role. Mention company by name. 3-4 sentences.",
-    "body": "Body: map your 2-3 most relevant experiences to the key JD requirements. Specific and concrete. 4-5 sentences.",
-    "impact": "Impact: one standout achievement that differentiates you. Include a real detail from the CV. 3-4 sentences.",
-    "closing": "Closing: enthusiasm, call to action, availability. 2-3 sentences."
+    "opening": "Opening paragraph: strong hook + specific reason why THIS company and THIS role. Mention company by name. MAX 2 sentences.",
+    "body": "Body: map your 2 most relevant experiences to the key JD requirements. Specific and concrete. MAX 3 sentences.",
+    "impact": "Impact: one standout achievement that differentiates you. Include a real metric or detail from the CV. MAX 2 sentences.",
+    "closing": "Closing: enthusiasm, call to action. MAX 2 sentences."
   }
 }`;
 
@@ -427,39 +427,45 @@ function buildCoverLetterHtml(cl, company, role, profile) {
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body {
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: 13.5px;
-    line-height: 1.75;
+    font-size: 12.5px;
+    line-height: 1.65;
     color: #1a1a1a;
     background: #fff;
-    padding: 52px 60px;
+    padding: 36px 52px;
     max-width: 800px;
     margin: 0 auto;
+    /* Force single page: A4 = 297mm, Puppeteer uses 10mm top+bottom margin */
+    height: 257mm;
+    overflow: hidden;
   }
   .cl-name {
-    font-size: 26px;
+    font-size: 22px;
     font-weight: 700;
     color: #111;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
   }
   .cl-contact {
-    font-size: 13px;
-    line-height: 1.9;
+    font-size: 12px;
+    line-height: 1.7;
     color: #333;
-    margin-bottom: 20px;
+    margin-bottom: 14px;
   }
   .cl-contact a { color: #333; text-decoration: none; }
-  hr { border: none; border-top: 1px solid #ccc; margin-bottom: 32px; }
-  .date { font-size: 13px; color: #555; margin-bottom: 28px; }
-  .recipient-label { font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
-  .recipient-company { font-size: 16px; font-weight: 700; color: #111; margin-bottom: 2px; }
-  .recipient-role { font-size: 13.5px; color: #444; margin-bottom: 28px; }
-  .salutation { font-size: 13.5px; font-weight: 600; margin-bottom: 20px; }
-  .body-text p { font-size: 13.5px; line-height: 1.8; color: #222; margin-bottom: 18px; text-align: justify; }
-  .closing { margin-top: 36px; }
-  .sign-off { font-size: 13.5px; margin-bottom: 36px; }
-  .sig-name { font-size: 17px; font-weight: 700; color: #111; margin-bottom: 4px; }
-  .sig-contact { font-size: 12.5px; color: #666; }
-  @media print { body { padding: 28px 36px; } }
+  hr { border: none; border-top: 1px solid #ccc; margin-bottom: 22px; }
+  .date { font-size: 12px; color: #555; margin-bottom: 18px; }
+  .recipient-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .recipient-company { font-size: 14px; font-weight: 700; color: #111; margin-bottom: 2px; }
+  .recipient-role { font-size: 12.5px; color: #444; margin-bottom: 20px; }
+  .salutation { font-size: 12.5px; font-weight: 600; margin-bottom: 14px; }
+  .body-text p { font-size: 12.5px; line-height: 1.7; color: #222; margin-bottom: 12px; text-align: justify; }
+  .closing { margin-top: 22px; }
+  .sign-off { font-size: 12.5px; margin-bottom: 22px; }
+  .sig-name { font-size: 15px; font-weight: 700; color: #111; margin-bottom: 3px; }
+  .sig-contact { font-size: 12px; color: #666; }
+  @media print {
+    body { padding: 28px 40px; height: 257mm; overflow: hidden; }
+    @page { margin: 10mm; size: A4; }
+  }
 </style>
 </head>
 <body>

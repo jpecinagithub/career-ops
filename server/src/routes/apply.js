@@ -1,8 +1,19 @@
 import express from 'express';
 import { applyApplication } from '../services/applier.js';
+import { injectSecurityCode } from '../services/codeRelay.js';
 import db from '../db/index.js';
 
 const router = express.Router();
+
+// POST /api/apply/security-code — inject a code read from email into a waiting applier
+// Body: { requestId, code }
+router.post('/security-code', (req, res) => {
+  const { requestId, code } = req.body;
+  if (!requestId || !code) return res.status(400).json({ error: 'requestId y code requeridos' });
+  const ok = injectSecurityCode(requestId, code);
+  if (!ok) return res.status(404).json({ error: 'No hay solicitud pendiente con ese requestId (ya resuelto o expirado)' });
+  res.json({ ok: true, msg: `Código "${code}" inyectado correctamente` });
+});
 
 // POST /api/apply/all — apply to all Selected applications (SSE)
 router.post('/all', async (req, res) => {

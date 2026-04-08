@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { evaluateStream, api } from '../lib/api.js';
+import { api } from '../lib/api.js';
+import { getState, subscribe, startEvaluation, stopEvaluation, clearEvaluation } from '../lib/evaluationStore.js';
 import ScoreBadge from '../components/ScoreBadge.jsx';
 import toast from 'react-hot-toast';
 
@@ -139,43 +140,41 @@ function SaveModal({ score, url, report, onClose, onSaved }) {
 }
 
 export default function Evaluator() {
-  const [jdText, setJdText] = useState('');
-  const [url, setUrl] = useState('');
-  const [report, setReport] = useState('');
-  const [streaming, setStreaming] = useState(false);
-  const [done, setDone] = useState(false);
+  // Sync local UI state from the global store — persists across route changes
+  const [evalState, setEvalState] = useState(getState);
+  const [jdText, setJdText] = useState(() => getState().jdText || '');
+  const [url, setUrl] = useState(() => getState().url || '');
   const [saved, setSaved] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const abortRef = useRef(null);
-  const reportRef = useRef('');
   const qc = useQueryClient();
 
+  // Subscribe to store updates — keep in sync even when component was unmounted
+  useEffect(() => {
+    const unsub = subscribe((s) => {
+      setEvalState(s);
+      if (s.status === 'error') toast.error(`Error: ${s.error}`);
+    });
+    return unsub; // unsubscribe on unmount — but stream keeps running in the store
+  }, []);
+
+  const report = evalState.report;
+  const streaming = evalState.status === 'streaming';
+  const done = evalState.status === 'done' || evalState.status === 'error';
   const score = done ? extractScore(report) : null;
 
   const handleEvaluate = useCallback(() => {
     if (!jdText.trim()) { toast.error('Pega el texto del JD primero'); return; }
-    setReport('');
-    reportRef.current = '';
-    setDone(false);
     setSaved(false);
-    setStreaming(true);
+    startEvaluation(jdText, url); // stream runs in global store — survives navigation
+  }, [jdText, url]);
 
-    abortRef.current = evaluateStream(
-      jdText,
-      (chunk) => {
-        reportRef.current += chunk;
-        setReport(prev => prev + chunk);
-      },
-      () => {
-        setStreaming(false);
-        setDone(true);
-      },
-      (err) => { setStreaming(false); toast.error(`Error: ${err.message}`); }
-    );
-  }, [jdText]);
-
-  const handleStop = () => { abortRef.current?.(); setStreaming(false); setDone(true); };
-  const handleClear = () => { setJdText(''); setUrl(''); setReport(''); setDone(false); setSaved(false); };
+  const handleStop = () => { stopEvaluation(); };
+  const handleClear = () => {
+    clearEvaluation();
+    setJdText('');
+    setUrl('');
+    setSaved(false);
+  };
 
   const handleAddPipeline = async () => {
     if (!url) { toast.error('Introduce la URL para añadir al pipeline'); return; }

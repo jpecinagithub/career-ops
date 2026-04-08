@@ -225,6 +225,10 @@ export function updateApplication(id, data) {
     fields.push('pdf_path = ?');
     params.push(data.pdf_path);
   }
+  if (data.url !== undefined) {
+    fields.push('url = ?');
+    params.push(data.url);
+  }
 
   fields.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);

@@ -12,8 +12,10 @@
 
 import { chromium } from 'playwright';
 import { existsSync, readFileSync } from 'fs';
+import { randomUUID } from 'crypto';
 import { projectPath } from '../utils/paths.js';
 import db from '../db/index.js';
+import { waitForSecurityCode } from './codeRelay.js';
 
 // ── ATS detection ─────────────────────────────────────────────────────────────
 function detectAts(url = '') {
@@ -34,16 +36,182 @@ function buildCandidate() {
   const get = (key) => profile.match(new RegExp(`${key}:\\s*"([^"]+)"`))?.[1] || '';
   const nameParts = get('full_name').split(' ');
   return {
-    firstName:  nameParts[0] || '',
-    lastName:   nameParts.slice(1).join(' ') || '',
-    fullName:   get('full_name'),
-    email:      get('email'),
-    phone:      get('phone'),
-    location:   get('location').split(',')[0].trim(),
-    country:    'Spain',
-    linkedin:   get('linkedin'),
-    portfolio:  get('portfolio_url'),
+    firstName:            nameParts[0] || '',
+    lastName:             nameParts.slice(1).join(' ') || '',
+    fullName:             get('full_name'),
+    email:                get('email'),
+    phone:                get('phone'),
+    location:             get('location').split(',')[0].trim(),
+    country:              'Spain',
+    linkedin:             get('linkedin'),
+    portfolio:            get('portfolio_url'),
+    // application_answers fields
+    noticePeriod:         get('notice_period'),
+    salaryExpectation:    get('salary_expectation'),
+    salaryRange:          get('salary_expectation_range'),
+    workPermit:           get('work_permit'),
+    euPassport:           get('eu_passport'),
+    hybridAvailable:      get('hybrid_available'),
+    remoteAvailable:      get('remote_available'),
+    relocation:           get('relocation'),
+    languages:            get('languages'),
+    referral:             get('referral'),
+    heardAbout:           get('heard_about'),
+    startDate:            get('start_date'),
+    currentlyEmployed:    get('currently_employed'),
+    yearsExperience:      get('years_experience'),
   };
+}
+
+// ── Custom question answerer ──────────────────────────────────────────────────
+// Reads all visible custom question fields on a Greenhouse form,
+// matches label text to known answers from profile, fills them in.
+async function fillCustomQuestions(page, c, filled, errors) {
+  // Keyword → answer mapping (order matters — most specific first)
+  const ANSWER_MAP = [
+    { keywords: ['eu passport', 'work permit', 'right to work', 'authorized to work', 'visa', 'sponsorship'], answer: c.workPermit || 'Yes' },
+    { keywords: ['notice period', 'notice'],                                          answer: c.noticePeriod || '1 month' },
+    { keywords: ['salary expectation', 'salary expect', 'expected salary', 'compensation', 'gross annual', 'annual salary'], answer: c.salaryExpectation || '65000' },
+    { keywords: ['hybrid', 'days in office', 'office per week', 'on-site', 'onsite'], answer: c.hybridAvailable || 'Yes' },
+    { keywords: ['relocat'],                                                           answer: c.relocation || 'Yes' },
+    { keywords: ['remote'],                                                            answer: c.remoteAvailable || 'Yes' },
+    { keywords: ['linkedin'],                                                          answer: c.linkedin },
+    { keywords: ['language', 'english', 'spanish'],                                   answer: c.languages },
+    { keywords: ['hear about', 'heard about', 'how did you find', 'source', 'referral'], answer: c.heardAbout || 'Job board' },
+    { keywords: ['start date', 'available to start', 'when can you start'],           answer: c.startDate || '1 month notice period' },
+    { keywords: ['currently employed', 'currently working'],                          answer: c.currentlyEmployed || 'Yes' },
+    { keywords: ['years of experience', 'years experience'],                          answer: c.yearsExperience || '15' },
+    { keywords: ['website', 'portfolio', 'personal site'],                            answer: c.portfolio || c.linkedin },
+    { keywords: ['city', 'where are you based', 'current location', 'currently based'], answer: 'Logroño, Spain' },
+    { keywords: ['country'],                                                           answer: 'Spain' },
+    // Consent / GDPR / data privacy — always Yes
+    { keywords: ['protect your data', 'data privacy', 'privacy notice', 'gdpr', 'personal data', 'data protection', 'give you full control'], answer: 'Yes' },
+    // DEI / inclusion / safe environment — always Yes
+    { keywords: ['inclusive', 'inclusion', 'diversity', 'safe environment', 'equal opportunity', 'priority number one', 'provide a safe'], answer: 'Yes' },
+    // Generic consent / agreement catch-all (must be last)
+    { keywords: ['i agree', 'i confirm', 'i consent', 'i acknowledge', 'i understand', 'i accept'], answer: 'Yes' },
+  ];
+
+  // Collect all visible custom question inputs (Greenhouse uses question_{id})
+  const customFields = await page.evaluate(() => {
+    const results = [];
+    // Text inputs and textareas with id starting with "question_"
+    const els = [...document.querySelectorAll(
+      'input[id^="question_"], textarea[id^="question_"], input[data-field^="question"]'
+    )];
+    for (const el of els) {
+      if (!el.offsetParent) continue; // skip hidden
+      // Try to find label: aria-label, then associated <label>, then closest label-like element
+      const labelEl = document.querySelector(`label[for="${el.id}"]`);
+      const labelText = el.getAttribute('aria-label') || labelEl?.textContent?.trim() || '';
+      results.push({ id: el.id, tag: el.tagName.toLowerCase(), labelText });
+    }
+    return results;
+  });
+
+  // Collect all visible question_ elements: text inputs + comboboxes (react-select)
+  const allQuestionFields = await page.evaluate(() => {
+    const results = [];
+    const els = [...document.querySelectorAll('[id^="question_"]')];
+    for (const el of els) {
+      if (!el.offsetParent) continue; // skip hidden
+      if (el.id.endsWith('-label') || el.id.endsWith('-description')) continue; // skip label/desc
+      const labelEl = document.querySelector(`label[for="${el.id}"]`);
+      const labelText = el.getAttribute('aria-label') || labelEl?.textContent?.trim() || '';
+      const isCombobox = el.getAttribute('role') === 'combobox' || el.className?.includes('select__input');
+      const isTextInput = (el.tagName === 'INPUT' && el.type === 'text' && !isCombobox) || el.tagName === 'TEXTAREA';
+      results.push({ id: el.id, tag: el.tagName.toLowerCase(), isCombobox, isTextInput, labelText });
+    }
+    return results;
+  });
+
+  for (const field of allQuestionFields) {
+    const label = field.labelText.toLowerCase();
+    let matched = false;
+
+    for (const rule of ANSWER_MAP) {
+      if (!rule.answer) continue;
+      if (rule.keywords.some(k => label.includes(k))) {
+
+        if (field.isTextInput) {
+          // Standard text input / textarea
+          try {
+            const el = await page.$(`#${field.id}`);
+            if (el && await el.isVisible().catch(() => false)) {
+              await el.click({ force: true });
+              await el.fill(String(rule.answer));
+              filled.push(`Q: ${field.labelText.slice(0, 40)}`);
+              matched = true;
+            }
+          } catch (e) {
+            errors.push(`Q(${field.id}): ${e.message.split('\n')[0]}`);
+          }
+
+        } else if (field.isCombobox) {
+          // React-select combobox: click input → wait for menu → click option
+          try {
+            const el = await page.$(`#${field.id}`);
+            if (el && await el.isVisible().catch(() => false)) {
+              await el.click({ force: true });
+              await page.waitForTimeout(600);
+
+              const answerLower = String(rule.answer).toLowerCase();
+
+              // React-select renders menu as sibling of the container.
+              // The container has id = field.id minus "__input" or just the base id.
+              // Options have id like "react-select-{field.id}-option-0"
+              const baseId = field.id.replace(/__input$/, '');
+              const optionIdPrefix = `react-select-${baseId}-option-`;
+
+              // Try to find options by id prefix first (most reliable)
+              let clicked = false;
+              const optionEls = await page.$$(`[id^="${optionIdPrefix}"]`);
+
+              if (optionEls.length > 0) {
+                for (const opt of optionEls) {
+                  const text = (await opt.textContent().catch(() => '')).toLowerCase().trim();
+                  if (answerLower.includes('yes') && text === 'yes') {
+                    await opt.click();
+                    filled.push(`Q(select): ${field.labelText.slice(0, 40)}`);
+                    clicked = true;
+                    break;
+                  }
+                  if (answerLower.includes('no') && text === 'no') {
+                    await opt.click();
+                    filled.push(`Q(select): ${field.labelText.slice(0, 40)}`);
+                    clicked = true;
+                    break;
+                  }
+                }
+                // Fallback: first option
+                if (!clicked) {
+                  const text = (await optionEls[0].textContent().catch(() => '')).trim();
+                  if (text && text !== 'Select...') {
+                    await optionEls[0].click();
+                    filled.push(`Q(select-first): ${field.labelText.slice(0, 40)}`);
+                    clicked = true;
+                  }
+                }
+              }
+
+              if (!clicked) {
+                await page.keyboard.press('Escape');
+                errors.push(`Q(combobox) no options: ${field.id}`);
+              }
+              matched = true;
+            }
+          } catch (e) {
+            errors.push(`Q(combobox)(${field.id}): ${e.message.split('\n')[0]}`);
+          }
+        }
+        break;
+      }
+    }
+
+    if (!matched && field.labelText) {
+      errors.push(`Q unanswered: "${field.labelText.slice(0, 60)}"`);
+    }
+  }
 }
 
 // ── Safe fill helper ──────────────────────────────────────────────────────────
@@ -103,6 +271,9 @@ async function fillGreenhouse(page, c, cvPath, clPath, filled, errors) {
   if (!filled.includes('CV/Resume')) {
     await tryUpload(page, 'input[type="file"][id*="resume" i]', cvPath, 'CV/Resume', filled, errors);
   }
+
+  // Fill all custom questions (notice period, salary, work permit, hybrid, etc.)
+  await fillCustomQuestions(page, c, filled, errors);
 }
 
 async function fillAshby(page, c, cvPath, clPath, filled, errors) {
@@ -195,11 +366,17 @@ export async function applyApplication(appId, emit) {
   if (!app.cv_path || !existsSync(app.cv_path)) throw new Error('CV not generated yet — generate CV first');
   if (!app.cover_letter_path || !existsSync(app.cover_letter_path)) throw new Error('Cover letter not generated yet');
 
+  // gh_jid= in URL = Greenhouse form embedded in company's own site as an iframe.
+  // We must navigate to the company URL (not job-boards.greenhouse.io), then click Apply,
+  // which loads the Greenhouse iframe. The form fields live inside that iframe.
+  const hasGhJid = /[?&]gh_jid=\d+/.test(app.url) && !app.url.includes('greenhouse.io');
+
   const ats = detectAts(app.url);
   emit({ type: 'log', msg: `🌐 [${app.company}] Navigating to ${app.url}` });
-  emit({ type: 'log', msg: `🔍 [${app.company}] ATS: ${ats}` });
+  if (hasGhJid) emit({ type: 'log', msg: `🖼️ [${app.company}] Greenhouse embed — buscando iframe tras click en Apply` });
+  else emit({ type: 'log', msg: `🔍 [${app.company}] ATS: ${ats}` });
 
-  const browser = await chromium.launch({ headless: true, slowMo: 100 });
+  const browser = await chromium.launch({ headless: false, slowMo: 200 });
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -210,13 +387,47 @@ export async function applyApplication(appId, emit) {
     await page.goto(app.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(2000);
 
+    // For embedded Greenhouse (gh_jid): click Apply to load the form iframe
+    if (hasGhJid) {
+      const applySelectors = [
+        'a[href*="/apply"]', 'a:has-text("Apply now")', 'a:has-text("Apply for this job")',
+        'button:has-text("Apply now")', 'button:has-text("Apply for this job")',
+        'a:has-text("Apply")', 'button:has-text("Apply")',
+      ];
+      for (const sel of applySelectors) {
+        try {
+          const el = await page.$(sel);
+          if (el && await el.isVisible()) {
+            await el.click();
+            emit({ type: 'log', msg: `  → Clicked Apply button` });
+            break;
+          }
+        } catch {}
+      }
+      // Wait for iframe to load
+      await page.waitForTimeout(4000);
+    }
+
     // Check for login wall
     const pageText = (await page.innerText('body').catch(() => '')).toLowerCase();
     const loginKeywords = ['sign in to apply', 'login to apply', 'create an account to apply', 'log in to continue'];
     if (loginKeywords.some(k => pageText.includes(k))) {
-      emit({ type: 'login_required', appId, company: app.company, msg: `⚠️ [${app.company}] Requires login — skipping` });
-      await browser.close();
+      db.runUpdate(
+        'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['Failed', appId]
+      );
+      emit({ type: 'failed', appId, company: app.company, reason: 'login_required', msg: `⚠️ [${app.company}] Requiere login — marcada como fallida` });
       return { success: false, reason: 'login_required' };
+      // browser closed in finally
+    }
+
+    // Detect Greenhouse iframe (embedded on company site)
+    // Pattern: greenhouse.io/embed/job_app — form is inside an iframe, not the main page
+    let fillTarget = page;
+    const ghEmbedFrame = page.frames().find(f => f.url().includes('greenhouse.io/embed'));
+    if (ghEmbedFrame) {
+      emit({ type: 'log', msg: `  → Greenhouse iframe encontrado: ${ghEmbedFrame.url().slice(0, 60)}...` });
+      fillTarget = ghEmbedFrame;
     }
 
     // Fill form
@@ -225,60 +436,161 @@ export async function applyApplication(appId, emit) {
     const filled = [];
     const errors = [];
 
-    if (ats === 'greenhouse')  await fillGreenhouse(page, c, app.cv_path, app.cover_letter_path, filled, errors);
-    else if (ats === 'ashby')  await fillAshby(page, c, app.cv_path, app.cover_letter_path, filled, errors);
-    else if (ats === 'lever')  await fillLever(page, c, app.cv_path, app.cover_letter_path, filled, errors);
-    else                       await fillGeneric(page, c, app.cv_path, app.cover_letter_path, filled, errors);
+    const effectiveAts = ghEmbedFrame ? 'greenhouse' : ats;
+    if (effectiveAts === 'greenhouse')  await fillGreenhouse(fillTarget, c, app.cv_path, app.cover_letter_path, filled, errors);
+    else if (effectiveAts === 'ashby')  await fillAshby(fillTarget, c, app.cv_path, app.cover_letter_path, filled, errors);
+    else if (effectiveAts === 'lever')  await fillLever(fillTarget, c, app.cv_path, app.cover_letter_path, filled, errors);
+    else                                await fillGeneric(fillTarget, c, app.cv_path, app.cover_letter_path, filled, errors);
 
     emit({ type: 'log', msg: `✅ [${app.company}] Filled: ${filled.join(', ') || 'none detected'}` });
     if (errors.length) {
       emit({ type: 'log', msg: `⚠️ [${app.company}] Could not fill: ${errors.map(e => e.split(':')[0]).join(', ')}` });
     }
 
-    // Find submit button
-    const submitSel = await findSubmitButton(page);
+    // Find submit button (check iframe first, then main page)
+    const submitSel = await findSubmitButton(fillTarget) || await findSubmitButton(page);
     if (!submitSel) {
-      emit({ type: 'log', msg: `⚠️ [${app.company}] Submit button not found — marking as skipped` });
-      await browser.close();
+      db.runUpdate(
+        'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['Failed', appId]
+      );
+      emit({ type: 'failed', appId, company: app.company, reason: 'no_submit_button', msg: `⚠️ [${app.company}] Botón de submit no encontrado — marcada como fallida` });
       return { success: false, reason: 'no_submit_button', filled, errors };
+      // browser closed in finally
     }
 
     emit({ type: 'log', msg: `🎯 [${app.company}] Clicking submit: "${submitSel}"` });
 
-    // Click submit
-    await page.click(submitSel, { timeout: 10000 });
+    // Click submit (use fillTarget if it's an iframe, otherwise main page)
+    await fillTarget.click(submitSel, { timeout: 10000 });
 
     // Wait for navigation or confirmation
     await Promise.race([
       page.waitForNavigation({ timeout: 15000 }).catch(() => {}),
-      page.waitForTimeout(5000),
+      page.waitForTimeout(6000),
     ]);
 
-    // Screenshot of result
-    const ss = await page.screenshot({ encoding: 'base64', type: 'png', fullPage: false });
+    // ── Security code check (Greenhouse email verification) ───────────────────
+    // Greenhouse sometimes requires an 8-char code sent to candidate's email.
+    // Detect the field, pause, let Claude read the email and inject the code.
+    const securityCodeField = await page.$('input[name*="security" i], input[placeholder*="security code" i], input[id*="security" i], input[placeholder*="code" i][maxlength="8"]')
+      .catch(() => null);
 
-    // Update DB status to Applied
-    db.runUpdate(
-      'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      ['Applied', appId]
-    );
+    if (securityCodeField && await securityCodeField.isVisible().catch(() => false)) {
+      const requestId = randomUUID();
+      emit({
+        type: 'security_code_needed',
+        requestId,
+        appId,
+        company: app.company,
+        email: app.email || 'jpecina@gmail.com',
+        msg: `📧 [${app.company}] Greenhouse pide código de verificación por email. Leyendo Gmail... (requestId: ${requestId})`,
+      });
 
-    emit({
-      type: 'applied',
-      appId,
-      company: app.company,
-      role: app.role,
-      filled,
-      errors,
-      screenshot: ss,
-    });
+      // Wait up to 2 minutes for the code to be injected
+      const code = await waitForSecurityCode(requestId, 120000);
+      emit({ type: 'log', msg: `🔑 [${app.company}] Código recibido: ${code} — introduciendo...` });
 
-    emit({ type: 'log', msg: `🚀 [${app.company}] Applied successfully!` });
+      // The security code field is on the main page (not the iframe)
+      await securityCodeField.click({ force: true });
+      await securityCodeField.fill(code);
+      await page.waitForTimeout(1000);
 
-    return { success: true, filled, errors, screenshot: ss };
+      // Wait for submit button to become enabled after code entry
+      // The button may be in the main page (outside the iframe)
+      const submitSelectors = [
+        'button[type="submit"]:not([disabled])',
+        'input[type="submit"]:not([disabled])',
+        'button:has-text("Submit"):not([disabled])',
+        'button:has-text("Apply"):not([disabled])',
+      ];
+
+      let submitted = false;
+      for (const sel of submitSelectors) {
+        try {
+          await page.waitForSelector(sel, { timeout: 5000 });
+          await page.click(sel, { timeout: 8000 });
+          submitted = true;
+          break;
+        } catch {}
+      }
+
+      if (!submitted) {
+        // Try iframe submit as fallback
+        const submitSel2 = await findSubmitButton(fillTarget);
+        if (submitSel2) {
+          try { await fillTarget.click(submitSel2, { force: true, timeout: 8000 }); submitted = true; } catch {}
+        }
+      }
+
+      if (submitted) {
+        await Promise.race([
+          page.waitForNavigation({ timeout: 15000 }).catch(() => {}),
+          page.waitForTimeout(6000),
+        ]);
+      }
+    }
+
+    // ── Verify submission was accepted ────────────────────────────────────────
+    // Check both the main page and the iframe for confirmation text.
+    // If none found, mark as Unconfirmed — do NOT silently mark as Applied.
+    const CONFIRMATION_KEYWORDS = [
+      'thank you', 'thanks for applying', 'application received', 'application submitted',
+      'we received your application', 'successfully submitted', 'your application has been',
+      'we will be in touch', 'we\'ll be in touch', 'gracias', 'solicitud recibida',
+      'application complete', 'you\'re all set', 'we got your application',
+      // Greenhouse post-submission: shows blank form again with "Create a Job Alert"
+      'create a job alert', 'job alert',
+    ];
+
+    const pageBodyText = (await page.innerText('body').catch(() => '')).toLowerCase();
+    const frameBodyText = ghEmbedFrame
+      ? (await ghEmbedFrame.innerText('body').catch(() => '')).toLowerCase()
+      : '';
+    const combinedText = pageBodyText + ' ' + frameBodyText;
+
+    const confirmed = CONFIRMATION_KEYWORDS.some(k => combinedText.includes(k));
+
+    // Take a screenshot for audit — save to output/
+    const outputDir = projectPath('output');
+    const slug = app.company.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const date = new Date().toISOString().split('T')[0];
+    const screenshotPath = `${outputDir}/screenshot-${slug}-${date}.png`;
+    await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {});
+
+    if (confirmed) {
+      db.runUpdate(
+        'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['Applied', appId]
+      );
+      emit({ type: 'applied', appId, company: app.company, role: app.role, filled, errors });
+      emit({ type: 'log', msg: `✅ [${app.company}] Confirmación detectada — marcada como Applied` });
+      return { success: true, filled, errors };
+    } else {
+      // Submit clicked but no confirmation text found — could be CAPTCHA, validation error, etc.
+      db.runUpdate(
+        'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['Unconfirmed', appId]
+      );
+      emit({
+        type: 'unconfirmed',
+        appId,
+        company: app.company,
+        role: app.role,
+        msg: `⚠️ [${app.company}] Submit clickado pero sin confirmación en pantalla — marcada como Unconfirmed. Revisa manualmente. Screenshot: ${screenshotPath}`,
+      });
+      return { success: false, reason: 'no_confirmation', filled, errors };
+    }
 
   } catch (err) {
-    emit({ type: 'log', msg: `❌ [${app.company}] Error: ${err.message}` });
+    // Mark as Failed in DB on any unexpected error
+    try {
+      db.runUpdate(
+        'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['Failed', appId]
+      );
+    } catch {}
+    emit({ type: 'failed', appId, company: app.company, reason: 'error', msg: `❌ [${app.company}] Error: ${err.message} — marcada como fallida` });
     throw err;
   } finally {
     try { await browser.close(); } catch {}

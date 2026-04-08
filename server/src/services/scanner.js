@@ -141,20 +141,69 @@ async function fetchGreenhouseApi(company, apiUrl, emit) {
     const res = await fetch(apiUrl, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) { emit({ type: 'log', msg: `    ✗ ${company}: HTTP ${res.status}` }); return []; }
     const data = await res.json();
-
-    // NOTE: Greenhouse API only returns OPEN/ACTIVE jobs.
-    // If a job is listed here it IS currently accepting applications — no date filter needed.
-    // We mark them verified_active so the main loop skips the date check.
     const jobs = (data.jobs || []).map(j => ({
       title: j.title,
       url: j.absolute_url,
       company,
       location: j.location?.name || null,
       posted_at: j.updated_at || null,
-      verified_active: true,   // confirmed open via API
+      verified_active: true,
       source: `Greenhouse API — ${company}`,
     }));
+    emit({ type: 'log', msg: `    ✓ ${company}: ${jobs.length} ofertas activas` });
+    return jobs;
+  } catch (err) {
+    emit({ type: 'log', msg: `    ✗ ${company}: ${err.message}` });
+    return [];
+  }
+}
 
+// ── Ashby API ───────────────────────────────────────────────────────────────
+
+async function fetchAshbyApi(company, slug, emit) {
+  try {
+    emit({ type: 'log', msg: `  → Ashby API: ${company}` });
+    const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) { emit({ type: 'log', msg: `    ✗ ${company}: HTTP ${res.status}` }); return []; }
+    const data = await res.json();
+    const jobs = (data.results || []).map(j => ({
+      title: j.title,
+      url: j.jobUrl || `https://jobs.ashbyhq.com/${slug}/${j.id}`,
+      company,
+      location: j.locationName || j.isRemote ? 'Remote' : null,
+      posted_at: j.publishedDate || null,
+      verified_active: true,
+      source: `Ashby API — ${company}`,
+    }));
+    emit({ type: 'log', msg: `    ✓ ${company}: ${jobs.length} ofertas activas` });
+    return jobs;
+  } catch (err) {
+    emit({ type: 'log', msg: `    ✗ ${company}: ${err.message}` });
+    return [];
+  }
+}
+
+// ── Lever API ───────────────────────────────────────────────────────────────
+
+async function fetchLeverApi(company, slug, emit) {
+  try {
+    emit({ type: 'log', msg: `  → Lever API: ${company}` });
+    const res = await fetch(`https://api.lever.co/v0/postings/${slug}?mode=json`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) { emit({ type: 'log', msg: `    ✗ ${company}: HTTP ${res.status}` }); return []; }
+    const data = await res.json();
+    const jobs = (Array.isArray(data) ? data : []).map(j => ({
+      title: j.text,
+      url: j.hostedUrl,
+      company,
+      location: j.categories?.location || null,
+      posted_at: j.createdAt ? new Date(j.createdAt).toISOString().split('T')[0] : null,
+      verified_active: true,
+      source: `Lever API — ${company}`,
+    }));
     emit({ type: 'log', msg: `    ✓ ${company}: ${jobs.length} ofertas activas` });
     return jobs;
   } catch (err) {
@@ -271,42 +320,60 @@ async function webSearch(query, emit) {
   try {
     const { chat } = await import('./llm.js');
     const today = new Date().toISOString().split('T')[0];
-    const cutoff = cutoffDate(MAX_AGE_DAYS).toISOString().split('T')[0];
 
-    const prompt = `Today is ${today}. Search the web for active job listings matching this query. Return a JSON array of positions you find.
+    const prompt = `Today is ${today}. Search the web for job listings matching the query below. Return a JSON array.
 
 Query: ${query}
 
-INSTRUCTIONS:
-- Search now and return real positions found in your search results.
-- Include any job that appears to be currently open (posted in the last ${MAX_AGE_DAYS} days preferred, but include older ones too if the posting seems active).
-- For the URL, use the best link you can find: direct apply URL, company careers page URL, LinkedIn job view URL, or any URL that leads to this specific job.
-- Include the date if you can see it. If not visible set posted_date to null.
-- Do NOT include jobs located in the United States, Canada, or Australia.
-- Include 3-10 jobs. If you genuinely find nothing, return [].
+Return ONLY a valid JSON array (no markdown, no explanation):
+[{"title":"Job Title","url":"https://direct-apply-url","company":"Company Name","posted_date":"YYYY-MM-DD or null","location":"City, Country"}]
 
-Return ONLY a valid JSON array, no markdown fences, no explanation:
-[{"title":"Job Title","url":"https://...","company":"Company Name","posted_date":"YYYY-MM-DD or null","location":"City, Country"}]`;
+Rules: real results only, no US/Canada/Australia jobs, 3-10 items max, return [] if nothing found.`;
 
     const result = await chat([
       { role: 'user', content: prompt }
-    ], { maxTokens: 1200, temperature: 0.1, enableSearch: true });
+    ], { maxTokens: 1500, temperature: 0, enableSearch: true, model: 'qwen-max' });
 
     llmAvailable = true;
-    const content = result.choices[0]?.message?.content || '[]';
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-    const jobs = JSON.parse(jsonMatch[0]);
+    const content = result.choices[0]?.message?.content || '';
 
-    return jobs
-      .filter(j => !j.posted_date || isWithinWindow(j.posted_date))
-      .map(j => ({ ...j, source: `WebSearch: ${query.slice(0, 40)}` }));
+    // Debug: show first 120 chars of raw response
+    const preview = content.slice(0, 120).replace(/\n/g, ' ');
+    emit({ type: 'log', msg: `    ↳ LLM raw: ${preview}${content.length > 120 ? '…' : ''}` });
+
+    if (!content || content.trim() === '[]' || content.trim() === '') {
+      return [];
+    }
+
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      emit({ type: 'log', msg: `    ⚠️ No JSON array in response — model may not be searching the web` });
+      return [];
+    }
+
+    let jobs;
+    try {
+      jobs = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      emit({ type: 'log', msg: `    ⚠️ JSON parse error: ${parseErr.message}` });
+      return [];
+    }
+
+    if (!Array.isArray(jobs) || jobs.length === 0) return [];
+
+    const filtered = jobs.filter(j => !j.posted_date || isWithinWindow(j.posted_date));
+    emit({ type: 'log', msg: `    ✓ ${filtered.length} jobs parsed (${jobs.length - filtered.length} filtered by date)` });
+    return filtered.map(j => ({ ...j, source: `WebSearch: ${query.slice(0, 40)}` }));
+
   } catch (err) {
     const is403 = err.message?.includes('403') || err.message?.includes('Access to model denied');
     const is401 = err.message?.includes('401') || err.message?.includes('Incorrect API key');
+    const isTimeout = err.message?.includes('timeout') || err.message?.includes('AbortError');
     if (is403 || is401) {
       llmAvailable = false;
-      emit({ type: 'log', msg: `  ⚠️  LLM no disponible (${err.status || 'error'}). WebSearch desactivado — usando solo APIs de portales.` });
+      emit({ type: 'log', msg: `  ⚠️  LLM no disponible (${err.status || err.message}). WebSearch desactivado.` });
+    } else if (isTimeout) {
+      emit({ type: 'log', msg: `    ✗ Timeout (30s) — query demasiado lenta, saltando` });
     } else {
       emit({ type: 'log', msg: `    ✗ WebSearch error: ${err.message}` });
     }
@@ -331,10 +398,18 @@ export async function runScan(emit) {
   let totalAdded = 0;
   const newOffers = [];
 
+  const wsEnabled         = config.websearch_enabled !== false; // default true, opt-out via portals.yml
+  const ghCompaniesCount  = tracked_companies.filter(c => c.enabled !== false && c.api).length;
+  const ashbyCount        = tracked_companies.filter(c => c.enabled !== false && c.ashby_api).length;
+  const leverCount        = tracked_companies.filter(c => c.enabled !== false && c.lever_api).length;
+  const wsCompaniesCount  = wsEnabled ? tracked_companies.filter(c => c.enabled !== false && c.scan_method === 'websearch' && c.scan_query && !c.api && !c.ashby_api && !c.lever_api).length : 0;
+  const queriesCount      = wsEnabled ? search_queries.filter(q => q.enabled !== false).length : 0;
   emit({ type: 'start', msg: `Portal Scan — ${new Date().toISOString().split('T')[0]} (ventana: últimos ${MAX_AGE_DAYS} días)` });
+  const wsStatus = wsEnabled ? `WebSearch: ${wsCompaniesCount} portales · ${queriesCount} queries` : `WebSearch: desactivado`;
+  emit({ type: 'log', msg: `📋 APIs directas: ${ghCompaniesCount} Greenhouse · ${ashbyCount} Ashby · ${leverCount} Lever | ${wsStatus}` });
   emit({ type: 'log', msg: '━━━━━━━━━━━━━━━━━━━━━━━━━━' });
 
-  // ── Level 2: Greenhouse APIs ───────────────────────────────────────────────
+  // ── Level 2a: Greenhouse APIs ─────────────────────────────────────────────
   const ghCompanies = tracked_companies.filter(c => c.enabled !== false && c.api);
   emit({ type: 'log', msg: `\n📡 Greenhouse APIs (${ghCompanies.length} empresas)...` });
 
@@ -346,21 +421,63 @@ export async function runScan(emit) {
     totalFound += jobs.length;
   }
 
+  // ── Level 2b: Ashby APIs ───────────────────────────────────────────────────
+  const ashbyCompanies = tracked_companies.filter(c => c.enabled !== false && c.ashby_api);
+  if (ashbyCompanies.length > 0) {
+    emit({ type: 'log', msg: `\n📡 Ashby APIs (${ashbyCompanies.length} empresas)...` });
+    for (const company of ashbyCompanies) {
+      const jobs = await fetchAshbyApi(company.name, company.ashby_api, emit);
+      allJobs.push(...jobs);
+      totalFound += jobs.length;
+    }
+  }
+
+  // ── Level 2c: Lever APIs ───────────────────────────────────────────────────
+  const leverCompanies = tracked_companies.filter(c => c.enabled !== false && c.lever_api);
+  if (leverCompanies.length > 0) {
+    emit({ type: 'log', msg: `\n📡 Lever APIs (${leverCompanies.length} empresas)...` });
+    for (const company of leverCompanies) {
+      const jobs = await fetchLeverApi(company.name, company.lever_api, emit);
+      allJobs.push(...jobs);
+      totalFound += jobs.length;
+    }
+  }
+
   // ── Level 2b: VisaSponsor.jobs HTML scraper ────────────────────────────────
   const vsJobs = await fetchVisaSponsorPortals(visa_sponsor_portals, emit);
   allJobs.push(...vsJobs);
   totalFound += vsJobs.length;
 
-  // ── Level 3: WebSearch queries ─────────────────────────────────────────────
-  const queries = search_queries.filter(q => q.enabled !== false).slice(0, 10); // limit to 10 to avoid rate limits
-  emit({ type: 'log', msg: `\n🔍 WebSearch queries (${queries.length} queries)...` });
+  // ── Level 3: tracked_companies with scan_method: websearch ───────────────
+  if (wsEnabled) {
+    const wsCompanies = tracked_companies.filter(c => c.enabled !== false && c.scan_method === 'websearch' && c.scan_query);
+    emit({ type: 'log', msg: `\n🏢 Portales corporativos/directos WebSearch (${wsCompanies.length} portales)...` });
 
-  for (const q of queries) {
-    emit({ type: 'log', msg: `  → ${q.name}` });
-    const results = await webSearch(q.query, emit);
-    allJobs.push(...results.map(r => ({ ...r, source: q.name })));
-    totalFound += results.length;
-    emit({ type: 'log', msg: `    ✓ ${results.length} resultados` });
+    for (const company of wsCompanies) {
+      emit({ type: 'log', msg: `  → ${company.name}` });
+      const results = await webSearch(company.scan_query, emit);
+      allJobs.push(...results.map(r => ({ ...r, source: company.name, company: r.company || company.name })));
+      totalFound += results.length;
+      emit({ type: 'log', msg: `    ✓ ${results.length} resultados` });
+      if (llmAvailable === false) break;
+      await new Promise(r => setTimeout(r, 800));
+    }
+  }
+
+  // ── Level 4: WebSearch generic queries ─────────────────────────────────────
+  if (wsEnabled) {
+    const queries = search_queries.filter(q => q.enabled !== false);
+    emit({ type: 'log', msg: `\n🔍 WebSearch queries genéricas (${queries.length} queries)...` });
+
+    for (const q of queries) {
+      emit({ type: 'log', msg: `  → ${q.name}` });
+      const results = await webSearch(q.query, emit);
+      allJobs.push(...results.map(r => ({ ...r, source: q.name })));
+      totalFound += results.length;
+      emit({ type: 'log', msg: `    ✓ ${results.length} resultados` });
+      if (llmAvailable === false) break;
+      await new Promise(r => setTimeout(r, 800));
+    }
   }
 
   // ── Filter + dedup ─────────────────────────────────────────────────────────
@@ -424,7 +541,7 @@ export async function runScan(emit) {
   // ── Summary ────────────────────────────────────────────────────────────────
   const summary = {
     date: new Date().toISOString().split('T')[0],
-    queriesRun: ghCompanies.length + queries.length,
+    queriesRun: ghCompanies.length + wsCompanies.length + queries.length,
     totalFound,
     tooOld: totalTooOld,
     filtered: totalFiltered,

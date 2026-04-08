@@ -16,7 +16,13 @@ states:
   - id: applied
     label: Applied
     aliases: [aplicado, enviada, aplicada, sent]
-    description: Application submitted
+    description: Application submitted and confirmed (confirmation page or email received)
+    dashboard_group: applied
+
+  - id: unconfirmed
+    label: Unconfirmed
+    aliases: [sin_confirmar, sin confirmar]
+    description: Submit clicked but no confirmation detected — verify manually
     dashboard_group: applied
 
   - id: responded

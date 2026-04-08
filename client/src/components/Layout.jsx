@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { useUiStore } from '../store/ui.js';
+import { subscribe, getState } from '../lib/evaluationStore.js';
 
 const NAV = [
   { to: '/', label: '📊 Dashboard', end: true },
@@ -31,6 +33,13 @@ const styles = {
 };
 
 export default function Layout() {
+  const [evalRunning, setEvalRunning] = useState(() => getState().status === 'streaming');
+
+  useEffect(() => {
+    const unsub = subscribe(s => setEvalRunning(s.status === 'streaming'));
+    return unsub;
+  }, []);
+
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100%' }}>
       <aside style={styles.sidebar}>
@@ -46,8 +55,17 @@ export default function Layout() {
               })}
             >
               {label}
+              {/* Show pulsing dot on Evaluar when stream is running */}
+              {to === '/evaluate' && evalRunning && (
+                <span style={{
+                  display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+                  background: '#22c55e', marginLeft: 7, verticalAlign: 'middle',
+                  animation: 'pulse 1.2s infinite',
+                }} />
+              )}
             </NavLink>
           ))}
+          <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
         </nav>
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
           Jon Peciña · Finance
