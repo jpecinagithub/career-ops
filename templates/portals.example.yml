@@ -154,6 +154,11 @@ search_queries:
     query: '"Director Financiero" OR "Responsable Financiero" OR "Controller Financiero" OR "Finance Manager" Spain OR remote'
     enabled: true
 
+  # -- Dream Team (Spain executive roles) --
+  - name: Dream Team — Directivos y Mando Intermedios
+    query: 'site:www.dream-team.es "Director Financiero" OR "Director de Finanzas" OR "Controller" OR "Finance Manager" OR " Responsabilidad" OR "Gerencia"'
+    enabled: true
+
 tracked_companies:
   # -- International / tech / scaleups with finance teams --
 
@@ -347,4 +352,13 @@ tracked_companies:
     scan_method: websearch
     scan_query: 'site:jobs.personio.com finance OR controller OR accounting OR FP&A'
     notes: "European SaaS with structured finance teams."
+    enabled: true
+
+  # -- Spanish executive portals --
+
+  - name: Dream Team
+    careers_url: https://www.dream-team.es/ofertas-de-empleo-directivos-y-mandos-intermedios
+    scan_method: websearch
+    scan_query: 'site:www.dream-team.es "Director Financiero" OR "Director de Finanzas" OR "Controller" OR "Finance Manager" OR "Gerencia" OR "Responsabilidad"'
+    notes: "Spain. Executive and management roles."
     enabled: true
