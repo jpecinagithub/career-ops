@@ -449,8 +449,11 @@ export async function runScan(emit) {
   totalFound += vsJobs.length;
 
   // ── Level 3: tracked_companies with scan_method: websearch ───────────────
-  if (wsEnabled) {
-    const wsCompanies = tracked_companies.filter(c => c.enabled !== false && c.scan_method === 'websearch' && c.scan_query);
+  const wsCompanies = wsEnabled 
+    ? tracked_companies.filter(c => c.enabled !== false && c.scan_method === 'websearch' && c.scan_query)
+    : [];
+  
+  if (wsEnabled && wsCompanies.length > 0) {
     emit({ type: 'log', msg: `\n🏢 Portales corporativos/directos WebSearch (${wsCompanies.length} portales)...` });
 
     for (const company of wsCompanies) {
@@ -541,7 +544,7 @@ export async function runScan(emit) {
   // ── Summary ────────────────────────────────────────────────────────────────
   const summary = {
     date: new Date().toISOString().split('T')[0],
-    queriesRun: ghCompanies.length + wsCompanies.length + queries.length,
+    queriesRun: ghCompanies.length + (wsEnabled ? wsCompanies?.length || 0 : 0) + queries.length,
     totalFound,
     tooOld: totalTooOld,
     filtered: totalFiltered,
