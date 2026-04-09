@@ -212,6 +212,59 @@ async function fetchLeverApi(company, slug, emit) {
   }
 }
 
+// ── Adzuna Jobs API ─────────────────────────────────────────────────────────
+
+const ADZUNA_COUNTRIES = ['nl', 'de', 'es', 'be'];
+
+async function fetchAdzunaApi(config, emit) {
+  const appId  = process.env.ADZUNA_APP_ID;
+  const appKey = process.env.ADZUNA_APP_KEY;
+  if (!appId || !appKey) {
+    emit({ type: 'log', msg: '  ⚠️  Adzuna: ADZUNA_APP_ID / ADZUNA_APP_KEY no configuradas' });
+    return [];
+  }
+
+  const countries = config.countries || ADZUNA_COUNTRIES;
+  const category  = config.category  || 'accounting-finance-jobs';
+  const perPage   = 50;
+  const allJobs   = [];
+
+  emit({ type: 'log', msg: `\n📡 Adzuna API (${countries.length} países, categoría: ${category})...` });
+
+  for (const country of countries) {
+    try {
+      const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1` +
+        `?app_id=${appId}&app_key=${appKey}` +
+        `&category=${encodeURIComponent(category)}` +
+        `&results_per_page=${perPage}` +
+        `&sort_by=date` +
+        `&content-type=application/json`;
+
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) {
+        emit({ type: 'log', msg: `  ✗ Adzuna [${country.toUpperCase()}]: HTTP ${res.status}` });
+        continue;
+      }
+      const data = await res.json();
+      const jobs = (data.results || []).map(j => ({
+        title:          j.title,
+        url:            j.redirect_url,
+        company:        j.company?.display_name || null,
+        location:       j.location?.display_name || null,
+        posted_at:      j.created ? j.created.split('T')[0] : null,
+        verified_active: true,
+        source:         `Adzuna [${country.toUpperCase()}]`,
+      }));
+      emit({ type: 'log', msg: `  ✓ Adzuna [${country.toUpperCase()}]: ${jobs.length} ofertas` });
+      allJobs.push(...jobs);
+    } catch (err) {
+      emit({ type: 'log', msg: `  ✗ Adzuna [${country.toUpperCase()}]: ${err.message}` });
+    }
+  }
+
+  return allJobs;
+}
+
 // ── VisaSponsor.jobs HTML scraper ───────────────────────────────────────────
 
 /**
@@ -399,6 +452,7 @@ export async function runScan(emit) {
   const newOffers = [];
 
   const wsEnabled         = config.websearch_enabled !== false; // default true, opt-out via portals.yml
+  const adzunaConfig      = config.adzuna_enabled !== false ? (config.adzuna || {}) : null;
   const ghCompaniesCount  = tracked_companies.filter(c => c.enabled !== false && c.api).length;
   const ashbyCount        = tracked_companies.filter(c => c.enabled !== false && c.ashby_api).length;
   const leverCount        = tracked_companies.filter(c => c.enabled !== false && c.lever_api).length;
@@ -406,7 +460,8 @@ export async function runScan(emit) {
   const queriesCount      = wsEnabled ? search_queries.filter(q => q.enabled !== false).length : 0;
   emit({ type: 'start', msg: `Portal Scan — ${new Date().toISOString().split('T')[0]} (ventana: últimos ${MAX_AGE_DAYS} días)` });
   const wsStatus = wsEnabled ? `WebSearch: ${wsCompaniesCount} portales · ${queriesCount} queries` : `WebSearch: desactivado`;
-  emit({ type: 'log', msg: `📋 APIs directas: ${ghCompaniesCount} Greenhouse · ${ashbyCount} Ashby · ${leverCount} Lever | ${wsStatus}` });
+  const adzunaStatus = adzunaConfig ? `Adzuna: ${(adzunaConfig.countries || ADZUNA_COUNTRIES).length} países` : `Adzuna: desactivado`;
+  emit({ type: 'log', msg: `📋 APIs directas: ${ghCompaniesCount} Greenhouse · ${ashbyCount} Ashby · ${leverCount} Lever · ${adzunaStatus} | ${wsStatus}` });
   emit({ type: 'log', msg: '━━━━━━━━━━━━━━━━━━━━━━━━━━' });
 
   // ── Level 2a: Greenhouse APIs ─────────────────────────────────────────────
@@ -441,6 +496,13 @@ export async function runScan(emit) {
       allJobs.push(...jobs);
       totalFound += jobs.length;
     }
+  }
+
+  // ── Level 2d: Adzuna API ───────────────────────────────────────────────────
+  if (adzunaConfig) {
+    const adzunaJobs = await fetchAdzunaApi(adzunaConfig, emit);
+    allJobs.push(...adzunaJobs);
+    totalFound += adzunaJobs.length;
   }
 
   // ── Level 2b: VisaSponsor.jobs HTML scraper ────────────────────────────────
