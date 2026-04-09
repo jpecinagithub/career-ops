@@ -544,7 +544,7 @@ export async function runScan(emit) {
   // ── Summary ────────────────────────────────────────────────────────────────
   const summary = {
     date: new Date().toISOString().split('T')[0],
-    queriesRun: ghCompanies.length + (wsEnabled ? wsCompanies?.length || 0 : 0) + queries.length,
+    queriesRun: ghCompanies.length + (wsEnabled ? (wsCompanies?.length || 0) + (search_queries.filter(q => q.enabled !== false).length) : 0),
     totalFound,
     tooOld: totalTooOld,
     filtered: totalFiltered,
